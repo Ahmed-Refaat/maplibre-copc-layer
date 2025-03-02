@@ -45,7 +45,9 @@ function loadThreeLayerFromUrlParams() {
 	if (copcUrl) {
 		customLayer = new ThreeLayer(copcUrl, {
 			maxCacheSize: maxCacheSize,
-			colorMode: 'rgb',
+			colorMode: 'height',
+			pointSize: 10,
+			sseThreshold: 4,
 		});
 		map.addLayer(customLayer);
 	}

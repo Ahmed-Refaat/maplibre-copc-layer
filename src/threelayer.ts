@@ -11,6 +11,7 @@ export interface ThreeLayerOptions {
 	pointSizeAttenuation?: boolean;
 	colorMode?: 'rgb' | 'height' | 'intensity' | 'white';
 	maxCacheSize?: number; // Maximum number of nodes to keep in cache
+	sseThreshold?: number;
 }
 
 export class ThreeLayer implements CustomLayerInterface {
@@ -26,12 +27,12 @@ export class ThreeLayer implements CustomLayerInterface {
 	private map?: MapLibre;
 	private worker: Worker;
 
+	private sseThreshold: number;
 	private pointsMap: Record<string, THREE.Points> = {};
 	private pointSize: number;
 	private pointSizeAttenuation: boolean;
 	private workerInitialized: boolean = false;
 	private visibleNodes: string[] = [];
-	private fpsElement?: HTMLElement;
 	private pointCache: Map<string, THREE.Points> = new Map(); // Cache for removed points
 	private maxCacheSize: number = 100; // Maximum number of nodes to keep in cache
 
@@ -43,12 +44,13 @@ export class ThreeLayer implements CustomLayerInterface {
 		this.options = options;
 
 		// Set default options
-		this.pointSize = options.pointSize || 6;
+		this.pointSize = options.pointSize ?? 6;
+		this.sseThreshold = options.sseThreshold ?? 8;
 		this.pointSizeAttenuation =
 			options.pointSizeAttenuation !== undefined
 				? options.pointSizeAttenuation
 				: false;
-		this.maxCacheSize = options.maxCacheSize || 100;
+		this.maxCacheSize = options.maxCacheSize ?? 100;
 
 		this.camera = new THREE.Camera();
 		this.scene = new THREE.Scene();
@@ -69,6 +71,7 @@ export class ThreeLayer implements CustomLayerInterface {
 					// Worker has initialized COPC data
 					this.workerInitialized = true;
 					this.worker.postMessage({ type: 'loadNode', node: '0-0-0-0' });
+					this.map?.panTo(message.center);
 					break;
 				case 'nodeLoaded':
 					// Node data loaded, create THREE.Points and add to scene if needed
@@ -208,6 +211,7 @@ export class ThreeLayer implements CustomLayerInterface {
 			cameraPosition: [...cameraLngLat, cameraAltitude],
 			mapHeight: this.map.transform.height,
 			fov: this.map.transform.fov,
+			sseThreshold: this.sseThreshold,
 		});
 	}
 
@@ -259,11 +263,6 @@ export class ThreeLayer implements CustomLayerInterface {
 		this.pointsMap = {};
 		this.visibleNodes = [];
 		this.pointCache.clear();
-
-		// Remove FPS counter
-		if (this.fpsElement && this.fpsElement.parentNode) {
-			this.fpsElement.parentNode.removeChild(this.fpsElement);
-		}
 	}
 
 	private pruneCache() {

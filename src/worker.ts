@@ -24,12 +24,10 @@ interface UpdatePointsMessage {
 	cameraPosition: [number, number, number];
 	mapHeight: number;
 	fov: number;
+	sseThreshold: number;
 }
 
 type WorkerMessage = InitMessage | LoadNodeMessage | UpdatePointsMessage;
-
-// Cache configuration
-const SSE_THRESHOLD = 6; // Screen Space Error threshold
 
 let copc: Copc | null = null;
 let proj: Converter;
@@ -121,7 +119,9 @@ async function initCopc(url: string) {
 			};
 		}, {});
 
-		self.postMessage({ type: 'initialized' });
+		const rootCenter = nodeCenters['0-0-0-0'];
+		const rootCenterLngLat = proj.inverse([rootCenter[0], rootCenter[1]]);
+		self.postMessage({ type: 'initialized', center: rootCenterLngLat });
 	} catch (error) {
 		self.postMessage({
 			type: 'error',
@@ -235,15 +235,12 @@ async function loadNode(node: string) {
 			manageCache();
 
 			// Send the node data to the main thread
-			self.postMessage(
-				{
-					type: 'nodeLoaded',
-					node,
-					positions: positions.buffer,
-					colors: colors.buffer,
-				},
-				[positions.buffer, colors.buffer],
-			);
+			self.postMessage({
+				type: 'nodeLoaded',
+				node,
+				positions: positions.buffer,
+				colors: colors.buffer,
+			});
 		}
 	} catch (error) {
 		self.postMessage({
@@ -254,11 +251,14 @@ async function loadNode(node: string) {
 		});
 	}
 }
+
+// FIXME: better debounce
 let count = 0;
 function updatePoints(
 	cameraPosition: [number, number, number],
 	mapHeight: number,
 	fov: number,
+	sseThreshold: number,
 ) {
 	if (count++ < 10) return;
 	else count = 0;
@@ -274,7 +274,7 @@ function updatePoints(
 			cameraPosition[2],
 		);
 
-		let passedNodes: string[] = [];
+		let sseTestedNodes: string[] = [];
 
 		// Test all nodes against SSE threshold
 		Object.entries(nodeCenters).forEach(([node, center]) => {
@@ -295,13 +295,13 @@ function updatePoints(
 			);
 
 			// If node passes SSE test, add it to nodesByDepth
-			if (sse > SSE_THRESHOLD) {
-				passedNodes.push(node);
+			if (sse > sseThreshold) {
+				sseTestedNodes.push(node);
 			}
 		});
 
 		// If no nodes pass the SSE test, default to root node
-		if (passedNodes.length === 0) {
+		if (sseTestedNodes.length === 0) {
 			self.postMessage({
 				type: 'nodesToLoad',
 				nodes: ['0-0-0-0'], // Default to root node if no nodes pass the SSE test
@@ -311,7 +311,7 @@ function updatePoints(
 
 		self.postMessage({
 			type: 'nodesToLoad',
-			nodes: passedNodes,
+			nodes: sseTestedNodes,
 		});
 	} catch (error) {
 		self.postMessage({
@@ -341,7 +341,12 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 				await loadNode(message.node);
 				break;
 			case 'updatePoints':
-				updatePoints(message.cameraPosition, message.mapHeight, message.fov);
+				updatePoints(
+					message.cameraPosition,
+					message.mapHeight,
+					message.fov,
+					message.sseThreshold,
+				);
 				break;
 			default:
 				self.postMessage({
