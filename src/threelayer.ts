@@ -2,62 +2,156 @@ import {
 	CustomLayerInterface,
 	CustomRenderMethodInput,
 	Map as MapLibre,
-	MercatorCoordinate,
 } from 'maplibre-gl';
 import * as THREE from 'three';
-import { Copc, Hierarchy } from 'copc';
-import proj4, { Converter } from 'proj4';
-import { computeScreenSpaceError } from './sse';
+
+// Configuration options for the ThreeLayer
+export interface ThreeLayerOptions {
+	pointSize?: number;
+	pointSizeAttenuation?: boolean;
+	colorMode?: 'rgb' | 'height' | 'intensity' | 'white';
+	maxCacheSize?: number; // Maximum number of nodes to keep in cache
+}
 
 export class ThreeLayer implements CustomLayerInterface {
 	id: string;
 	type: 'custom';
 	renderingMode: '3d';
 	url: string;
+	options: ThreeLayerOptions;
 
 	private camera: THREE.Camera;
 	private scene: THREE.Scene;
 	private renderer?: THREE.WebGLRenderer;
 	private map?: MapLibre;
+	private worker: Worker;
 
-	private copc: Copc | null = null;
-	private proj?: Converter;
-	private nodes: Hierarchy.Node.Map = {};
-	private nodeCenters: Record<string, [number, number, number]> = {};
 	private pointsMap: Record<string, THREE.Points> = {};
-	private pointSize: number = 6;
+	private pointSize: number;
+	private pointSizeAttenuation: boolean;
+	private workerInitialized: boolean = false;
+	private visibleNodes: string[] = [];
+	private fpsElement?: HTMLElement;
+	private pointCache: Map<string, THREE.Points> = new Map(); // Cache for removed points
+	private maxCacheSize: number = 100; // Maximum number of nodes to keep in cache
 
-	constructor(url: string) {
+	constructor(url: string, options: ThreeLayerOptions = {}) {
 		this.id = 'three_layer';
 		this.type = 'custom';
 		this.renderingMode = '3d';
 		this.url = url;
+		this.options = options;
+
+		// Set default options
+		this.pointSize = options.pointSize || 6;
+		this.pointSizeAttenuation =
+			options.pointSizeAttenuation !== undefined
+				? options.pointSizeAttenuation
+				: false;
+		this.maxCacheSize = options.maxCacheSize || 100;
 
 		this.camera = new THREE.Camera();
 		this.scene = new THREE.Scene();
+
+		// Initialize the worker
+		this.worker = new Worker(new URL('./worker.ts', import.meta.url), {
+			type: 'module',
+		});
+		this.setupWorkerMessageHandlers();
+	}
+
+	private setupWorkerMessageHandlers() {
+		this.worker.onmessage = (event) => {
+			const message = event.data;
+
+			switch (message.type) {
+				case 'initialized':
+					// Worker has initialized COPC data
+					this.workerInitialized = true;
+					this.worker.postMessage({ type: 'loadNode', node: '0-0-0-0' });
+					break;
+				case 'nodeLoaded':
+					// Node data loaded, create THREE.Points and add to scene if needed
+					if (!message.alreadyLoaded) {
+						// Create new points from the data
+						this.createPoints(message.node, message.positions, message.colors);
+					}
+					this.updateScene();
+					break;
+				case 'nodesToLoad':
+					// Update scene with the new maximum depth
+					this.visibleNodes = message.nodes;
+					this.updateScene();
+
+					// Load one node at a time to avoid overwhelming the worker
+					this.visibleNodes.forEach((node) => {
+						this.worker.postMessage({
+							type: 'loadNode',
+							node,
+						});
+					});
+
+					break;
+				case 'error':
+					console.error('Worker error:', message.message);
+					break;
+			}
+
+			if (this.map) {
+				this.map.triggerRepaint();
+			}
+		};
+
+		this.worker.onerror = (error) => {
+			console.error('Worker error event:', error);
+		};
+	}
+
+	private updateScene() {
+		// Prune cache if necessary
+		this.pruneCache();
+
+		// Remove ALL points from the scene
+		this.scene.children.forEach((c) => this.scene.remove(c));
+
+		// re-add
+		this.visibleNodes.forEach((n) => {
+			this.scene.add(this.pointsMap[n]);
+		});
+	}
+
+	private createPoints(
+		node: string,
+		positionsBuffer: ArrayBuffer,
+		colorsBuffer: ArrayBuffer,
+	) {
+		const positions = new Float32Array(positionsBuffer);
+		const colors = new Float32Array(colorsBuffer);
+
+		// Create geometry and add attributes
+		const geometry = new THREE.BufferGeometry();
+		geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+		geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+		// Create material with appropriate settings
+		const material = this.createPointMaterial();
+
+		// Create the points object and add to pointsMap
+		this.pointsMap[node] = new THREE.Points(geometry, material);
 	}
 
 	async onAdd(map: MapLibre, gl: WebGLRenderingContext) {
 		this.map = map;
 
-		// Load COPC data
-		this.copc = await Copc.create(this.url);
-		this.proj = proj4(this.copc.wkt!);
-
-		const { nodes } = await Copc.loadHierarchyPage(
-			this.url,
-			this.copc.info.rootHierarchyPage,
-		);
-		this.nodes = nodes;
-		this.nodeCenters = Object.entries(nodes).reduce((curr, [k, v]) => {
-			const center = calcCubeCenter(this.copc.info.cube, k);
-			return {
-				...curr,
-				[k]: center,
-			};
-		}, {});
-
-		this.loadNode('0-0-0-0');
+		// Initialize the worker with the COPC URL and options
+		this.worker.postMessage({
+			type: 'init',
+			url: this.url,
+			options: {
+				colorMode: this.options.colorMode || 'rgb',
+				maxCacheSize: this.options.maxCacheSize || 100,
+			},
+		});
 
 		// Setup renderer
 		this.renderer = new THREE.WebGLRenderer({
@@ -67,85 +161,54 @@ export class ThreeLayer implements CustomLayerInterface {
 		this.renderer.autoClear = false;
 	}
 
-	private async updatePoints() {
-		const cameraPostion = new THREE.Vector3(
-			...this.proj!.forward(this.map.transform.getCameraLngLat().toArray()),
-			this.map.transform.getCameraAltitude(),
-		);
+	// Method to adjust point size dynamically
+	public setPointSize(size: number) {
+		this.pointSize = size;
 
-		const nodesSseTested = Object.entries(this.nodeCenters).filter(
-			([node, center]) => {
-				const depth = parseInt(node.split('-')[0]);
-				const sse = computeScreenSpaceError(
-					cameraPostion,
-					new THREE.Vector3(...center),
-					this.map.transform.fov,
-					this.copc!.info.spacing * Math.pow(0.5, depth), // 1/1, 1/2, 1/4, 1/8, ...
-					this.map.transform.height,
-				);
-				return sse > 4; // arbitrary threshold
-			},
-		);
-
-		const maximumDepth = Math.max(
-			...nodesSseTested.map(([node]) => parseInt(node.split('-')[0])),
-		);
-		const nodesToLoad = nodesSseTested.filter(
-			([node]) => parseInt(node.split('-')[0]) === maximumDepth,
-		);
-		nodesToLoad.forEach(([node]) => this.loadNode(node));
-	}
-
-	async loadNode(node: string) {
-		if (this.pointsMap[node]) return;
-
-		const targetNode = this.nodes[node];
-		const positions: Float32Array = new Float32Array(targetNode.pointCount * 3);
-		const colors: Float32Array = new Float32Array(targetNode.pointCount * 3);
-
-		const view = await Copc.loadPointDataView(
-			this.url,
-			this.copc,
-			this.nodes[node],
-		);
-		const getters = ['X', 'Y', 'Z', 'Red', 'Green', 'Blue'].map(view.getter);
-		const getPoint = (index: number) => getters.map((get) => get(index));
-
-		for (let i = 0; i < this.nodes[node].pointCount; i++) {
-			const point = await getPointPromise(getPoint)(i);
-			const [lon, lat] = this.proj.inverse([point[0], point[1]]);
-			const merc = MercatorCoordinate.fromLngLat(
-				{ lng: lon, lat: lat },
-				point[2],
-			);
-
-			positions[i * 3] = merc.x;
-			positions[i * 3 + 1] = merc.y;
-			positions[i * 3 + 2] = merc.z;
-
-			colors[i * 3] = point[3] / 65535;
-			colors[i * 3 + 1] = point[4] / 65535;
-			colors[i * 3 + 2] = point[5] / 65535;
-		}
-
-		// add new points to the geometry
-		const geometry = new THREE.BufferGeometry();
-		geometry!.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-		geometry!.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-		const material = new THREE.PointsMaterial({
-			vertexColors: true,
-			size: this.pointSize,
-			sizeAttenuation: false,
+		// Update all existing points
+		Object.values(this.pointsMap).forEach((points) => {
+			if (points.material instanceof THREE.PointsMaterial) {
+				points.material.size = size;
+				points.material.needsUpdate = true;
+			}
 		});
 
-		this.pointsMap[node] = new THREE.Points(geometry, material);
-		// no depth test
-		this.pointsMap[node].material.depthTest = false;
+		if (this.map) {
+			this.map.triggerRepaint();
+		}
+	}
 
-		this.scene.add(this.pointsMap[node]);
+	// Method to toggle size attenuation
+	public toggleSizeAttenuation(enabled: boolean) {
+		this.pointSizeAttenuation = enabled;
 
-		this.map?.triggerRepaint();
+		// Update all existing points
+		Object.values(this.pointsMap).forEach((points) => {
+			if (points.material instanceof THREE.PointsMaterial) {
+				points.material.sizeAttenuation = enabled;
+				points.material.needsUpdate = true;
+			}
+		});
+
+		if (this.map) {
+			this.map.triggerRepaint();
+		}
+	}
+
+	private updatePoints() {
+		if (!this.map || !this.workerInitialized) return;
+
+		// Get camera position in world coordinates
+		const cameraLngLat = this.map.transform.getCameraLngLat().toArray();
+		const cameraAltitude = this.map.transform.getCameraAltitude();
+
+		// Send camera information to worker to determine which nodes to load
+		this.worker.postMessage({
+			type: 'updatePoints',
+			cameraPosition: [...cameraLngLat, cameraAltitude],
+			mapHeight: this.map.transform.height,
+			fov: this.map.transform.fov,
+		});
 	}
 
 	render(gl: WebGLRenderingContext, options: CustomRenderMethodInput) {
@@ -164,31 +227,97 @@ export class ThreeLayer implements CustomLayerInterface {
 
 		this.map.triggerRepaint();
 	}
-}
 
-function calcCubeCenter(
-	cube: [number, number, number, number, number, number],
-	node: string,
-) {
-	const _node = node.split('-').map((n) => parseInt(n)); // 3-4-5-6
-	const cubeSizeOfNode = [
-		cube[3] - cube[0],
-		cube[4] - cube[1],
-		cube[5] - cube[2],
-	].map((size) => size / Math.pow(2, _node[0]));
+	// Clean up resources when layer is removed
+	onRemove(map: MapLibre, gl: WebGLRenderingContext) {
+		// Terminate the worker
+		this.worker.terminate();
 
-	// cube origin + cube size * node + cube size / 2
-	const nodeCenter = [
-		cube[0] + cubeSizeOfNode[0] * _node[1] + cubeSizeOfNode[0] / 2,
-		cube[1] + cubeSizeOfNode[1] * _node[2] + cubeSizeOfNode[1] / 2,
-		cube[2] + cubeSizeOfNode[2] * _node[3] + cubeSizeOfNode[2] / 2,
-	];
-	return nodeCenter;
-}
+		// Remove all points from the scene
+		Object.keys(this.pointsMap).forEach((node) => {
+			this.scene.remove(this.pointsMap[node]);
 
-function getPointPromise(getPoint: (index: number) => number[]) {
-	return (index: number) =>
-		new Promise<number[]>((resolve) => {
-			resolve(getPoint(index));
+			// Dispose of geometry and material
+			const points = this.pointsMap[node];
+			if (points) {
+				points.geometry.dispose();
+				if (points.material instanceof THREE.Material) {
+					points.material.dispose();
+				}
+			}
 		});
+
+		// Dispose of cached points
+		this.pointCache.forEach((points) => {
+			points.geometry.dispose();
+			if (points.material instanceof THREE.Material) {
+				points.material.dispose();
+			}
+		});
+
+		// Clear maps and sets
+		this.pointsMap = {};
+		this.visibleNodes = [];
+		this.pointCache.clear();
+
+		// Remove FPS counter
+		if (this.fpsElement && this.fpsElement.parentNode) {
+			this.fpsElement.parentNode.removeChild(this.fpsElement);
+		}
+	}
+
+	private pruneCache() {
+		// If cache size is within limits, do nothing
+		if (this.pointCache.size <= this.maxCacheSize) {
+			return;
+		}
+
+		// Get all cached nodes
+		const cachedNodes = Array.from(this.pointCache.keys());
+
+		// Sort by depth (higher depth = more detailed = remove first)
+		cachedNodes.sort((a, b) => {
+			const depthA = parseInt(a.split('-')[0]);
+			const depthB = parseInt(b.split('-')[0]);
+			return depthB - depthA;
+		});
+
+		// Remove nodes until cache is within size limit
+		while (this.pointCache.size > this.maxCacheSize && cachedNodes.length > 0) {
+			const nodeToRemove = cachedNodes.shift()!;
+			const points = this.pointCache.get(nodeToRemove)!;
+
+			// Dispose of geometry and material
+			points.geometry.dispose();
+			if (points.material instanceof THREE.Material) {
+				points.material.dispose();
+			}
+
+			// Remove from cache
+			this.pointCache.delete(nodeToRemove);
+
+			// Log for debugging
+			console.log(
+				`Removed from cache: ${nodeToRemove}, Cache size: ${this.pointCache.size}`,
+			);
+		}
+	}
+
+	private createPointMaterial(): THREE.PointsMaterial {
+		const material = new THREE.PointsMaterial({
+			vertexColors: this.options.colorMode !== 'white',
+			size: this.pointSize,
+			sizeAttenuation: this.pointSizeAttenuation,
+		});
+
+		// If color mode is white, set the color directly
+		if (this.options.colorMode === 'white') {
+			material.color.set(0xffffff);
+		}
+
+		// Disable depth test for better blending
+		material.depthTest = false;
+
+		return material;
+	}
 }

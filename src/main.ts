@@ -1,4 +1,3 @@
-import { CustomLayer } from './layer';
 import { ThreeLayer } from './threelayer';
 
 import { Map, addProtocol } from 'maplibre-gl';
@@ -12,7 +11,6 @@ const map = new Map({
 	container: 'app',
 	style: {
 		version: 8,
-		//projection: { type: 'globe' },
 		sources: {
 			osm: {
 				type: 'raster',
@@ -21,13 +19,7 @@ const map = new Map({
 			},
 			dem: gsiTerrainSource,
 		},
-		layers: [
-			{
-				id: 'osm',
-				type: 'raster',
-				source: 'osm',
-			},
-		],
+		layers: [],
 		terrain: {
 			source: 'dem',
 		},
@@ -37,8 +29,24 @@ const map = new Map({
 	hash: true,
 });
 
+let customLayer: ThreeLayer | null = null;
+
 map.on('load', () => {
-	map.addLayer(
-		new ThreeLayer('http://localhost:5173/ogochi-dam-translated.copc.laz'),
-	);
+	loadThreeLayerFromUrlParams();
 });
+
+function loadThreeLayerFromUrlParams() {
+	const url = new URL(window.location.href);
+	const copcUrl = url.searchParams.get('copc');
+	const maxCacheSize = url.searchParams.get('maxCache')
+		? parseInt(url.searchParams.get('maxCache')!)
+		: 100;
+
+	if (copcUrl) {
+		customLayer = new ThreeLayer(copcUrl, {
+			maxCacheSize: maxCacheSize,
+			colorMode: 'rgb',
+		});
+		map.addLayer(customLayer);
+	}
+}
