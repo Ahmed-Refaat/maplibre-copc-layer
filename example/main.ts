@@ -89,7 +89,6 @@ function updateUrlParameters() {
 	const url = new URL(window.location.href);
 	url.searchParams.set('pointSize', parameters.pointSize.toString());
 	url.searchParams.set('colorMode', parameters.colorMode);
-	url.searchParams.set('maxCacheSize', parameters.maxCacheSize.toString());
 	url.searchParams.set('sseThreshold', parameters.sseThreshold.toString());
 	url.searchParams.set('depthTest', parameters.depthTest.toString());
 	window.history.pushState({}, '', url);
@@ -121,11 +120,6 @@ function loadParametersFromUrl() {
 			| 'height'
 			| 'intensity'
 			| 'white';
-	}
-
-	const maxCacheSize = url.searchParams.get('maxCacheSize');
-	if (maxCacheSize) {
-		parameters.maxCacheSize = parseInt(maxCacheSize);
 	}
 
 	const sseThreshold = url.searchParams.get('sseThreshold');
