@@ -8,7 +8,6 @@ import * as THREE from 'three';
 // Configuration options for the ThreeLayer
 export interface ThreeLayerOptions {
 	pointSize?: number;
-	pointSizeAttenuation?: boolean;
 	colorMode?: 'rgb' | 'height' | 'intensity' | 'white';
 	maxCacheSize?: number; // Maximum number of nodes to keep in cache
 	sseThreshold?: number;
@@ -27,7 +26,6 @@ export class ThreeLayer implements CustomLayerInterface {
 	worker: Worker;
 	pointsMap: Record<string, THREE.Points> = {};
 	pointSize: number;
-	pointSizeAttenuation: boolean;
 	depthTest: boolean;
 	options: ThreeLayerOptions;
 
@@ -47,10 +45,6 @@ export class ThreeLayer implements CustomLayerInterface {
 		// Set default options
 		this.pointSize = options.pointSize ?? 6;
 		this.sseThreshold = options.sseThreshold ?? 8;
-		this.pointSizeAttenuation =
-			options.pointSizeAttenuation !== undefined
-				? options.pointSizeAttenuation
-				: false;
 		this.maxCacheSize = options.maxCacheSize ?? 100;
 		this.depthTest = options.depthTest ?? true;
 
@@ -193,23 +187,6 @@ export class ThreeLayer implements CustomLayerInterface {
 		}
 	}
 
-	// Method to toggle size attenuation
-	public toggleSizeAttenuation(enabled: boolean) {
-		this.pointSizeAttenuation = enabled;
-
-		// Update all existing points
-		Object.values(this.pointsMap).forEach((points) => {
-			if (points.material instanceof THREE.PointsMaterial) {
-				points.material.sizeAttenuation = enabled;
-				points.material.needsUpdate = true;
-			}
-		});
-
-		if (this.map) {
-			this.map.triggerRepaint();
-		}
-	}
-
 	public toggleDepthTest(enabled: boolean) {
 		this.depthTest = enabled;
 
@@ -338,7 +315,6 @@ export class ThreeLayer implements CustomLayerInterface {
 		const material = new THREE.PointsMaterial({
 			vertexColors: this.options.colorMode !== 'white',
 			size: this.pointSize,
-			sizeAttenuation: this.pointSizeAttenuation,
 			depthTest: this.depthTest,
 			depthWrite: this.depthTest,
 		});
