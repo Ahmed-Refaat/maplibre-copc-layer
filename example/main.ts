@@ -133,27 +133,6 @@ Object.assign(sampleContainer.style, {
 	border: '1px solid #e2e8f0',
 });
 
-const sampleTitle = document.createElement('div');
-sampleTitle.textContent = 'Sample Data:';
-Object.assign(sampleTitle.style, {
-	fontSize: '12px',
-	fontWeight: '600',
-	color: '#6b7280',
-	marginBottom: '4px',
-});
-
-const sampleNote = document.createElement('div');
-sampleNote.textContent = 'Add sample COPC URLs here for easy testing';
-Object.assign(sampleNote.style, {
-	fontSize: '11px',
-	color: '#9ca3af',
-	fontStyle: 'italic',
-});
-
-sampleContainer.appendChild(sampleTitle);
-sampleContainer.appendChild(sampleNote);
-urlContainer.appendChild(sampleContainer);
-
 // Function to update URL parameters
 function updateUrlParameters() {
 	const url = new URL(window.location.href);
