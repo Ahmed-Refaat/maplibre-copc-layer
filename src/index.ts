@@ -4,11 +4,7 @@
  * @packageDocumentation
  */
 
-export {
-	ThreeLayer,
-	type ThreeLayerOptions,
-	type ColorMode,
-} from './copclayer';
+export { CopcLayer, type CopcLayerOptions, type ColorMode } from './copclayer';
 export { computeScreenSpaceError } from './worker/sse';
 
 // Re-export commonly used types from dependencies
