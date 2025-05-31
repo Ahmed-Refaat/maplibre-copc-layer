@@ -268,8 +268,9 @@ export class CopcLayer implements CustomLayerInterface {
 		nodeData.geometry = geometry;
 		nodeData.points = points;
 
-		// Add to cache
-		this.cacheManager.set(nodeData);
+		// Add to cache, protecting currently visible nodes from eviction
+		const protectedNodes = new Set(this.visibleNodes);
+		this.cacheManager.set(nodeData, protectedNodes);
 
 		// Log cache performance for debugging
 		if (this.options.enableCacheLogging) {
@@ -492,12 +493,13 @@ export class CopcLayer implements CustomLayerInterface {
 		// Update layer options
 		Object.assign(this.options, config);
 
-		// Update cache manager settings
+		// Update cache manager settings, protecting currently visible nodes
+		const protectedNodes = new Set(this.visibleNodes);
 		this.cacheManager.updateOptions({
 			maxNodes: this.options.maxCacheSize,
 			maxMemoryBytes: this.options.maxCacheMemory,
 			enableLogging: this.options.enableCacheLogging,
-		});
+		}, protectedNodes);
 
 		// Refresh visible nodes to apply new settings
 		this.updateVisibleNodes();

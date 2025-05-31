@@ -131,8 +131,9 @@ export class CacheManager {
 	 * Store node data in cache
 	 * 
 	 * @param nodeData - Complete node data to cache
+	 * @param protectedNodes - Set of node IDs that should not be evicted
 	 */
-	set(nodeData: CachedNodeData): void {
+	set(nodeData: CachedNodeData, protectedNodes?: Set<string>): void {
 		const { nodeId } = nodeData;
 		
 		// Check if already exists (update case)
@@ -144,7 +145,7 @@ export class CacheManager {
 		}
 		
 		// Ensure cache size limits before adding
-		this.ensureCacheLimits(nodeData.sizeBytes);
+		this.ensureCacheLimits(nodeData.sizeBytes, protectedNodes);
 		
 		// Add to cache
 		nodeData.lastAccessed = Date.now();
@@ -214,7 +215,7 @@ export class CacheManager {
 	/**
 	 * Update cache configuration
 	 */
-	updateOptions(newOptions: Partial<CacheManagerOptions>): void {
+	updateOptions(newOptions: Partial<CacheManagerOptions>, protectedNodes?: Set<string>): void {
 		Object.assign(this.options, newOptions);
 		
 		if (newOptions.maxMemoryBytes) {
@@ -222,7 +223,7 @@ export class CacheManager {
 		}
 		
 		// Enforce new limits immediately
-		this.ensureCacheLimits(0);
+		this.ensureCacheLimits(0, protectedNodes);
 		this.log('Cache options updated', this.options);
 	}
 	
@@ -286,8 +287,9 @@ export class CacheManager {
 	
 	/**
 	 * Ensure cache stays within size and memory limits
+	 * Protects currently visible nodes from eviction to prevent infinite loops
 	 */
-	private ensureCacheLimits(newItemSize: number): void {
+	private ensureCacheLimits(newItemSize: number, protectedNodes?: Set<string>): void {
 		// Check if we need to make space
 		while (
 			(this.cache.size >= this.options.maxNodes) ||
@@ -295,13 +297,31 @@ export class CacheManager {
 		) {
 			if (this.accessOrder.length === 0) break;
 			
-			// Remove least recently used item
-			const lruNodeId = this.accessOrder[0];
+			// Find the first evictable node (not protected)
+			let lruNodeId: string | null = null;
+			for (let i = 0; i < this.accessOrder.length; i++) {
+				const nodeId = this.accessOrder[i];
+				if (!protectedNodes || !protectedNodes.has(nodeId)) {
+					lruNodeId = nodeId;
+					break;
+				}
+			}
+			
+			// If no evictable nodes found, break to prevent infinite loop
+			if (!lruNodeId) {
+				this.log('Warning: Cannot evict any nodes - all are protected. Cache limit exceeded.');
+				break;
+			}
+			
+			// Remove the evictable node
 			const success = this.delete(lruNodeId);
 			
 			if (!success) {
 				// Safety fallback - should not happen
-				this.accessOrder.shift();
+				const index = this.accessOrder.indexOf(lruNodeId);
+				if (index > -1) {
+					this.accessOrder.splice(index, 1);
+				}
 			}
 		}
 	}
