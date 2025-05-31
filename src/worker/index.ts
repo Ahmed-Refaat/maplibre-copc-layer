@@ -27,7 +27,12 @@ interface UpdatePointsMessage {
 	sseThreshold: number;
 }
 
-type WorkerMessage = InitMessage | LoadNodeMessage | UpdatePointsMessage;
+interface CancelRequestsMessage {
+	type: 'cancelRequests';
+	nodes: string[];
+}
+
+type WorkerMessage = InitMessage | LoadNodeMessage | UpdatePointsMessage | CancelRequestsMessage;
 
 let copc: Copc | null = null;
 let proj: Converter;
@@ -35,6 +40,7 @@ let nodes: Hierarchy.Node.Map = {};
 let nodeCenters: Record<string, [number, number, number]> = {};
 let url: string;
 let colorMode: 'rgb' | 'height' | 'intensity' | 'white' = 'rgb';
+let cancelledRequests: Set<string> = new Set();
 
 /**
  * Calculate the center point of a cube at a specific node location
@@ -127,6 +133,12 @@ async function loadNode(node: string) {
 		return;
 	}
 
+	// Check if this request has been cancelled
+	if (cancelledRequests.has(node)) {
+		cancelledRequests.delete(node);
+		return; // Silently skip cancelled requests
+	}
+
 	try {
 		const targetNode = nodes[node];
 		if (!targetNode) {
@@ -136,6 +148,12 @@ async function loadNode(node: string) {
 
 		// Load point data from COPC file
 		const view = await Copc.loadPointDataView(url, copc, targetNode);
+
+		// Check if cancelled during loading
+		if (cancelledRequests.has(node)) {
+			cancelledRequests.delete(node);
+			return; // Silently skip cancelled requests
+		}
 
 		// Prepare position and color buffers
 		const positions = new Float32Array(targetNode.pointCount * 3);
@@ -337,6 +355,13 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 					message.fov,
 					message.sseThreshold,
 				);
+				break;
+
+			case 'cancelRequests':
+				// Mark all specified nodes as cancelled
+				message.nodes.forEach(nodeId => {
+					cancelledRequests.add(nodeId);
+				});
 				break;
 
 			default:

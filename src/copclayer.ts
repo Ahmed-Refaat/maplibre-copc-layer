@@ -122,6 +122,8 @@ export class CopcLayer implements CustomLayerInterface {
 	private pendingRequests: Set<string> = new Set();
 	/** Request queue to track load order */
 	private requestQueue: string[] = [];
+	/** Current camera position for request prioritization */
+	private lastCameraPosition: [number, number, number] | null = null;
 
 	/**
 	 * Creates a new CopcLayer instance
@@ -199,6 +201,10 @@ export class CopcLayer implements CustomLayerInterface {
 					break;
 
 				case 'nodesToLoad':
+					// Cancel all pending requests when camera moves
+					this.cancelAllPendingRequests();
+					// Update camera position for prioritization
+					this.lastCameraPosition = message.cameraPosition;
 					// Update visible nodes and request missing data
 					this.visibleNodes = message.nodes;
 					this.updateVisibleNodes();
@@ -301,8 +307,11 @@ export class CopcLayer implements CustomLayerInterface {
 			}
 		}
 
-		// Request missing nodes from worker
-		nodesToRequest.forEach((nodeId) => {
+		// Sort nodes by priority before requesting
+		const prioritizedNodes = this.prioritizeNodeRequests(nodesToRequest);
+
+		// Request missing nodes from worker in priority order
+		prioritizedNodes.forEach((nodeId) => {
 			this.requestNodeData(nodeId);
 		});
 	}
@@ -366,6 +375,85 @@ export class CopcLayer implements CustomLayerInterface {
 		if (index > -1) {
 			this.requestQueue.splice(index, 1);
 		}
+	}
+
+	/**
+	 * Cancel all pending requests when camera moves
+	 */
+	private cancelAllPendingRequests(): void {
+		if (this.pendingRequests.size === 0) {
+			return;
+		}
+
+		// Send cancellation message to worker
+		this.worker.postMessage({
+			type: 'cancelRequests',
+			nodes: Array.from(this.pendingRequests),
+		});
+
+		// Clear pending requests
+		this.pendingRequests.clear();
+		this.requestQueue.length = 0;
+
+		if (this.options.enableCacheLogging) {
+			console.log('[CopcLayer] Cancelled all pending requests due to camera movement');
+		}
+	}
+
+	/**
+	 * Prioritize node requests based on distance from camera and level of detail
+	 */
+	private prioritizeNodeRequests(nodeIds: string[]): string[] {
+		if (!this.lastCameraPosition || nodeIds.length <= 1) {
+			return nodeIds;
+		}
+
+		const [camLon, camLat] = this.lastCameraPosition;
+
+		// Calculate priority for each node
+		const nodesWithPriority = nodeIds.map((nodeId) => {
+			const parts = nodeId.split('-').map(Number);
+			const [depth, x, y] = parts;
+
+			// Higher depth (more detailed) nodes get higher base priority
+			const depthPriority = depth * 10;
+
+			// Calculate approximate node center for distance calculation
+			// This is a simplified calculation - in a real implementation
+			// you might want to use the actual cube calculations from the worker
+			const nodeSize = 1.0 / Math.pow(2, depth);
+			const nodeCenterX = x * nodeSize + nodeSize / 2;
+			const nodeCenterY = y * nodeSize + nodeSize / 2;
+
+			// Simple distance calculation (not geographically accurate but good for prioritization)
+			const dx = nodeCenterX - camLon;
+			const dy = nodeCenterY - camLat;
+			const distance = Math.sqrt(dx * dx + dy * dy);
+
+			// Closer nodes get higher priority (lower distance = higher priority)
+			const distancePriority = distance > 0 ? 1000 / distance : 1000;
+
+			// Combine priorities (depth is more important than distance for LOD)
+			const totalPriority = depthPriority + distancePriority * 0.1;
+
+			return {
+				nodeId,
+				priority: totalPriority,
+				depth,
+				distance,
+			};
+		});
+
+		// Sort by priority (highest first)
+		nodesWithPriority.sort((a, b) => b.priority - a.priority);
+
+		if (this.options.enableCacheLogging) {
+			console.log('[CopcLayer] Prioritized node requests:', 
+				nodesWithPriority.slice(0, 5).map(n => `${n.nodeId} (depth: ${n.depth}, dist: ${n.distance.toFixed(3)}, priority: ${n.priority.toFixed(1)})`)
+			);
+		}
+
+		return nodesWithPriority.map((n) => n.nodeId);
 	}
 
 	/**
