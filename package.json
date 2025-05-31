@@ -1,12 +1,40 @@
 {
-	"name": "copc-viewer",
-	"private": true,
-	"version": "0.0.0",
+	"name": "maplibre-copc-layer",
+	"version": "1.0.0",
+	"description": "A library for loading and rendering Cloud-Optimized Point Cloud (COPC) data in MapLibre GL JS",
 	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"files": [
+		"dist",
+		"src"
+	],
 	"scripts": {
 		"dev": "vite",
 		"build": "tsc && vite build && cp src/worker/laz-perf.wasm demo/assets",
+		"build:lib": "tsc --project tsconfig.lib.json",
 		"preview": "vite preview"
+	},
+	"keywords": [
+		"copc",
+		"point-cloud",
+		"maplibre",
+		"three.js",
+		"webgl",
+		"geospatial",
+		"lidar"
+	],
+	"author": "kanahiro",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/kanahiro/copc-viewer.git"
 	},
 	"devDependencies": {
 		"@types/proj4": "^2.5.6",

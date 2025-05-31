@@ -1,10 +1,15 @@
-## Depthを決める手順
+# Architecture Overview
 
-1. COPCの全てのLeafの中心点を計算する
-2. LeafごとのGeometric Errorが、カメラからそれぞれの中心点を見たときに、キャンバス上では何ピクセルに相当するかを計算する（DPIが考慮されるはず）。たとえば深いLeafほどGeometric Errorは小さいので、キャンバス上でのピクセル数も小さくなる。
-3. 2で計算した値が1（あるいはなんらかの定数）より大きいLeafを選択する。これは、一定より小さいGeometric Error（ピクセル）のLeafは読み込んでもキャンバス上で十分に表現されないためである。
+## Level-of-Detail Selection Process
 
-## Three.jsとWorker
+The system determines which COPC nodes to load based on Screen Space Error (SSE) calculations:
 
-- メインスレッドをブロックしないように適宜Workerを利用する。たとえばCOPCデータを読みこんだのち座標変換したりメモリに読み込んだりという処理は重たい。
-- MapLibre GL JS以外にも使えるようなモジュール構成とする（レンダリング部分を疎結合に）
+1. **Calculate node centers**: Compute the center point of all COPC leaf nodes in the hierarchy
+2. **Screen Space Error calculation**: For each node, calculate how many pixels the geometric error would occupy on screen when viewed from the current camera position (considering DPI). Deeper nodes have smaller geometric errors, resulting in fewer screen pixels
+3. **Node selection**: Select nodes where the calculated SSE value exceeds a threshold (typically 1 or another configurable constant). This ensures that nodes with geometric errors too small to be meaningfully represented on screen are not loaded
+
+## Three.js and Web Worker Architecture
+
+**Non-blocking processing**: Web Workers are used extensively to prevent blocking the main thread. Heavy operations like loading COPC data, coordinate transformations, and memory allocation are performed in the worker.
+
+**Modular design**: The architecture is designed to be decoupled from MapLibre GL JS, making the rendering components reusable with other mapping libraries.

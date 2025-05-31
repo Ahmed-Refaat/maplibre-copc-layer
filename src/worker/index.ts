@@ -11,6 +11,8 @@ interface InitMessage {
 	options?: {
 		colorMode?: 'rgb' | 'height' | 'intensity' | 'white';
 		maxCacheSize?: number;
+		wasmPath?: string;
+		baseUrl?: string;
 	};
 }
 

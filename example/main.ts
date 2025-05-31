@@ -1,4 +1,4 @@
-import { ThreeLayer } from '../src/threelayer';
+import { CopcLayer } from '../src/copclayer';
 
 import { Map, addProtocol } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -36,7 +36,7 @@ const map = new Map({
 	hash: true,
 });
 
-let customLayer: ThreeLayer | null = null;
+let copcLayer: CopcLayer | null = null;
 
 map.on('load', () => {
 	loadThreeLayerFromUrlParams();
@@ -48,41 +48,111 @@ const parameters = {
 	maxCacheSize: 100,
 	sseThreshold: 4,
 	depthTest: true,
+	wasmPath: '/assets/laz-perf.wasm', // Configure WASM path explicitly
 };
 
-// Create URL input container
+// Create URL input container with improved styling
 const urlContainer = document.createElement('div');
-urlContainer.style.position = 'absolute';
-urlContainer.style.top = '10px';
-urlContainer.style.left = '10px';
-urlContainer.style.zIndex = '1000';
-urlContainer.style.backgroundColor = 'white';
-urlContainer.style.padding = '10px';
-urlContainer.style.borderRadius = '4px';
-urlContainer.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+Object.assign(urlContainer.style, {
+	position: 'absolute',
+	top: '10px',
+	left: '10px',
+	zIndex: '1000',
+	backgroundColor: 'white',
+	padding: '12px',
+	borderRadius: '6px',
+	boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+	border: '1px solid #e2e8f0',
+	maxWidth: '400px',
+});
 
-// Create URL input
+// Create title
+const title = document.createElement('h3');
+title.textContent = 'COPC Data Source';
+Object.assign(title.style, {
+	margin: '0 0 8px 0',
+	fontSize: '14px',
+	fontWeight: '600',
+	color: '#374151',
+});
+
+// Create URL input with improved styling
 const urlInput = document.createElement('input');
-urlInput.type = 'text';
-urlInput.placeholder = 'Enter COPC URL';
-urlInput.style.width = '300px';
-urlInput.style.padding = '5px';
-urlInput.style.marginRight = '5px';
+Object.assign(urlInput, {
+	type: 'text',
+	placeholder: 'Enter COPC file URL (.copc.laz)',
+	value: '',
+});
+Object.assign(urlInput.style, {
+	width: '100%',
+	padding: '8px 12px',
+	marginBottom: '8px',
+	border: '1px solid #d1d5db',
+	borderRadius: '4px',
+	fontSize: '14px',
+	boxSizing: 'border-box',
+});
 
-// Create reload button
+// Create reload button with improved styling
 const reloadButton = document.createElement('button');
-reloadButton.textContent = 'Load';
-reloadButton.style.padding = '5px 10px';
-reloadButton.style.backgroundColor = '#4CAF50';
-reloadButton.style.color = 'white';
-reloadButton.style.border = 'none';
-reloadButton.style.borderRadius = '4px';
-reloadButton.style.cursor = 'pointer';
+reloadButton.textContent = 'Load Point Cloud';
+Object.assign(reloadButton.style, {
+	width: '100%',
+	padding: '8px 16px',
+	backgroundColor: '#3b82f6',
+	color: 'white',
+	border: 'none',
+	borderRadius: '4px',
+	cursor: 'pointer',
+	fontSize: '14px',
+	fontWeight: '500',
+	transition: 'background-color 0.2s',
+});
+
+// Add hover effect
+reloadButton.addEventListener('mouseenter', () => {
+	reloadButton.style.backgroundColor = '#2563eb';
+});
+reloadButton.addEventListener('mouseleave', () => {
+	reloadButton.style.backgroundColor = '#3b82f6';
+});
 
 // Add elements to container
+urlContainer.appendChild(title);
 urlContainer.appendChild(urlInput);
 urlContainer.appendChild(reloadButton);
 document.body.appendChild(urlContainer);
+
+// Add sample COPC URLs for easy testing
+const sampleContainer = document.createElement('div');
+Object.assign(sampleContainer.style, {
+	marginTop: '8px',
+	padding: '8px',
+	backgroundColor: '#f8fafc',
+	borderRadius: '4px',
+	border: '1px solid #e2e8f0',
+});
+
+const sampleTitle = document.createElement('div');
+sampleTitle.textContent = 'Sample Data:';
+Object.assign(sampleTitle.style, {
+	fontSize: '12px',
+	fontWeight: '600',
+	color: '#6b7280',
+	marginBottom: '4px',
+});
+
+const sampleNote = document.createElement('div');
+sampleNote.textContent = 'Add sample COPC URLs here for easy testing';
+Object.assign(sampleNote.style, {
+	fontSize: '11px',
+	color: '#9ca3af',
+	fontStyle: 'italic',
+});
+
+sampleContainer.appendChild(sampleTitle);
+sampleContainer.appendChild(sampleNote);
+urlContainer.appendChild(sampleContainer);
 
 // Function to update URL parameters
 function updateUrlParameters() {
@@ -138,7 +208,7 @@ loadParametersFromUrl();
 
 // Initialize GUI
 const gui = new GUI({
-	title: 'コントロール',
+	title: 'COPC Viewer Controls',
 	container: document.getElementById('gui') as HTMLElement,
 	width: 400,
 });
@@ -148,12 +218,26 @@ const pointsFolder = gui.addFolder('Point Settings');
 const renderingFolder = gui.addFolder('Rendering Options');
 const performanceFolder = gui.addFolder('Performance');
 
+// Add layer info display
+const infoFolder = gui.addFolder('Layer Info');
+const layerStats = {
+	loaded: 0,
+	visible: 0,
+	cached: 0,
+	isLoading: false,
+};
+
+infoFolder.add(layerStats, 'loaded').name('Loaded Nodes').listen();
+infoFolder.add(layerStats, 'visible').name('Visible Nodes').listen();
+infoFolder.add(layerStats, 'cached').name('Cached Nodes').listen();
+infoFolder.add(layerStats, 'isLoading').name('Is Loading').listen();
+
 // Update event listeners to save parameters to URL
 pointsFolder
 	.add(parameters, 'pointSize', 1, 20, 1)
 	.onChange((value: number) => {
-		if (customLayer) {
-			customLayer.setPointSize(value);
+		if (copcLayer) {
+			copcLayer.setPointSize(value);
 		}
 		updateUrlParameters();
 	});
@@ -161,20 +245,28 @@ pointsFolder
 pointsFolder
 	.add(parameters, 'colorMode', ['rgb', 'height', 'intensity', 'white'])
 	.onChange((value: string) => {
-		if (customLayer) {
-			// Need to recreate the layer with the new color mode
-			const currentLayer = customLayer;
+		if (copcLayer) {
+			// Recreate the layer with the new color mode
+			// Note: Color mode changes require full layer recreation
+			const currentLayer = copcLayer;
 			map.removeLayer(currentLayer.id);
 
-			customLayer = new ThreeLayer(currentLayer.url, {
-				maxCacheSize: parameters.maxCacheSize,
-				colorMode: value as 'rgb' | 'height' | 'intensity' | 'white',
-				pointSize: parameters.pointSize,
-				sseThreshold: parameters.sseThreshold,
-				depthTest: parameters.depthTest,
-			});
+			try {
+				copcLayer = new CopcLayer(currentLayer.url, {
+					maxCacheSize: parameters.maxCacheSize,
+					colorMode: value as 'rgb' | 'height' | 'intensity' | 'white',
+					pointSize: parameters.pointSize,
+					sseThreshold: parameters.sseThreshold,
+					depthTest: parameters.depthTest,
+				});
 
-			map.addLayer(customLayer);
+				map.addLayer(copcLayer);
+			} catch (error) {
+				console.error('Failed to recreate layer with new color mode:', error);
+				// Restore previous layer if recreation fails
+				copcLayer = currentLayer;
+				map.addLayer(copcLayer);
+			}
 		}
 		updateUrlParameters();
 	});
@@ -184,8 +276,8 @@ renderingFolder
 	.add(parameters, 'depthTest')
 	.name('Depth Test')
 	.onChange((value: boolean) => {
-		if (customLayer) {
-			customLayer.toggleDepthTest(value);
+		if (copcLayer) {
+			copcLayer.toggleDepthTest(value);
 		}
 		updateUrlParameters();
 	});
@@ -195,8 +287,8 @@ performanceFolder
 	.add(parameters, 'sseThreshold', 1, 10, 1)
 	.name('SSE Threshold')
 	.onChange((value: number) => {
-		if (customLayer) {
-			customLayer.setSseThreshold(value);
+		if (copcLayer) {
+			copcLayer.setSseThreshold(value);
 		}
 		updateUrlParameters();
 	});
@@ -204,6 +296,18 @@ performanceFolder
 // Open folders by default
 pointsFolder.open();
 renderingFolder.open();
+infoFolder.open();
+
+// Update stats periodically
+setInterval(() => {
+	if (copcLayer) {
+		const stats = copcLayer.getNodeStats();
+		layerStats.loaded = stats.loaded;
+		layerStats.visible = stats.visible;
+		layerStats.cached = stats.cached;
+		layerStats.isLoading = copcLayer.isLoading();
+	}
+}, 1000);
 
 // Update loadThreeLayerFromUrlParams to use parameters from URL
 function loadThreeLayerFromUrlParams() {
@@ -214,17 +318,17 @@ function loadThreeLayerFromUrlParams() {
 		: parameters.maxCacheSize;
 
 	if (copcUrl) {
-		if (customLayer) {
-			map.removeLayer(customLayer.id);
+		if (copcLayer) {
+			map.removeLayer(copcLayer.id);
 		}
-		customLayer = new ThreeLayer(copcUrl, {
+		copcLayer = new CopcLayer(copcUrl, {
 			maxCacheSize: maxCacheSize,
 			colorMode: parameters.colorMode,
 			pointSize: parameters.pointSize,
 			sseThreshold: parameters.sseThreshold,
 			depthTest: parameters.depthTest,
 		});
-		map.addLayer(customLayer);
+		map.addLayer(copcLayer);
 	}
 }
 
