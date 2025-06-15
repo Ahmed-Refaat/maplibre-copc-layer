@@ -241,7 +241,8 @@ export class CopcLayer implements CustomLayerInterface {
 		this.removeFromRequestQueue(nodeId);
 
 		// Convert to typed arrays
-		const positions = new Float32Array(positionsBuffer);
+		// Positions are Float64Array for high precision
+		const positions = new Float64Array(positionsBuffer);
 		const colors = new Float32Array(colorsBuffer);
 
 		// Create material configuration for caching
@@ -262,17 +263,32 @@ export class CopcLayer implements CustomLayerInterface {
 		// Create Three.js geometry and points object
 		const geometry = new THREE.BufferGeometry();
 		
-		// Apply relative-to-center transformation if scene center is set
+		// Apply relative-to-center transformation with high precision
 		if (this.sceneCenter) {
+			// Use double precision for the offset calculation
+			const centerX = this.sceneCenter.x;
+			const centerY = this.sceneCenter.y;
+			const centerZ = this.sceneCenter.z;
+			
+			// Convert to Float32Array only after applying the offset
+			// This preserves precision during the critical transformation step
 			const relativePositions = new Float32Array(positions.length);
 			for (let i = 0; i < positions.length; i += 3) {
-				relativePositions[i] = positions[i] - this.sceneCenter.x;
-				relativePositions[i + 1] = positions[i + 1] - this.sceneCenter.y;
-				relativePositions[i + 2] = positions[i + 2] - this.sceneCenter.z;
+				// Perform subtraction in double precision
+				const relX = positions[i] - centerX;
+				const relY = positions[i + 1] - centerY;
+				const relZ = positions[i + 2] - centerZ;
+				
+				// Store as Float32 only after transformation
+				relativePositions[i] = relX;
+				relativePositions[i + 1] = relY;
+				relativePositions[i + 2] = relZ;
 			}
 			geometry.setAttribute('position', new THREE.BufferAttribute(relativePositions, 3));
 		} else {
-			geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+			// Convert Float64Array to Float32Array for Three.js
+			const float32Positions = new Float32Array(positions);
+			geometry.setAttribute('position', new THREE.BufferAttribute(float32Positions, 3));
 		}
 		
 		geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -673,8 +689,9 @@ export class CopcLayer implements CustomLayerInterface {
 		const dy = currentMercator.y - this.sceneCenter.y;
 		const distance = Math.sqrt(dx * dx + dy * dy);
 		
-		// Update if moved more than 0.1 in Mercator units (significant distance)
-		return distance > 0.1;
+		// Update if moved more than 0.001 in Mercator units for higher precision
+		// This is approximately 100 meters at the equator
+		return distance > 0.001;
 	}
 
 	/**

@@ -14,8 +14,8 @@ import * as THREE from 'three';
 export interface CachedNodeData {
 	/** Unique node identifier (e.g., "3-4-5-6") */
 	nodeId: string;
-	/** Position buffer data for points */
-	positions: Float32Array;
+	/** Position buffer data for points (high precision) */
+	positions: Float64Array;
 	/** Color buffer data for points */
 	colors: Float32Array;
 	/** Number of points in this node */
@@ -237,12 +237,13 @@ export class CacheManager {
 	/**
 	 * Estimate memory usage of node data
 	 */
-	static estimateNodeSize(positions: Float32Array, colors: Float32Array): number {
-		// Float32Array: 4 bytes per float
+	static estimateNodeSize(positions: Float64Array | Float32Array, colors: Float32Array): number {
+		// Float64Array: 8 bytes per float, Float32Array: 4 bytes per float
 		// Add overhead for objects and metadata
-		const bufferSize = (positions.length + colors.length) * 4;
+		const positionSize = positions.length * (positions instanceof Float64Array ? 8 : 4);
+		const colorSize = colors.length * 4;
 		const objectOverhead = 1024; // Estimate for JS objects
-		return bufferSize + objectOverhead;
+		return positionSize + colorSize + objectOverhead;
 	}
 	
 	/**
@@ -250,13 +251,13 @@ export class CacheManager {
 	 */
 	static createNodeData(
 		nodeId: string,
-		positions: Float32Array,
+		positions: Float64Array,
 		colors: Float32Array,
 		materialConfig: CachedNodeData['materialConfig']
 	): CachedNodeData {
 		return {
 			nodeId,
-			positions: new Float32Array(positions), // Copy to ensure independence
+			positions: new Float64Array(positions), // Copy to ensure independence
 			colors: new Float32Array(colors),
 			pointCount: positions.length / 3,
 			materialConfig: { ...materialConfig },
