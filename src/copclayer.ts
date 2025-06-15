@@ -2,6 +2,7 @@ import {
 	CustomLayerInterface,
 	CustomRenderMethodInput,
 	Map as MapLibre,
+	MercatorCoordinate,
 } from 'maplibre-gl';
 import * as THREE from 'three';
 import { CacheManager, CachedNodeData, CacheStats } from './cache-manager';
@@ -124,6 +125,8 @@ export class CopcLayer implements CustomLayerInterface {
 	private requestQueue: string[] = [];
 	/** Current camera position for request prioritization */
 	private lastCameraPosition: [number, number, number] | null = null;
+	/** Scene center for precision rendering */
+	private sceneCenter: MercatorCoordinate | null = null;
 
 	/**
 	 * Creates a new CopcLayer instance
@@ -258,7 +261,20 @@ export class CopcLayer implements CustomLayerInterface {
 
 		// Create Three.js geometry and points object
 		const geometry = new THREE.BufferGeometry();
-		geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+		
+		// Apply relative-to-center transformation if scene center is set
+		if (this.sceneCenter) {
+			const relativePositions = new Float32Array(positions.length);
+			for (let i = 0; i < positions.length; i += 3) {
+				relativePositions[i] = positions[i] - this.sceneCenter.x;
+				relativePositions[i + 1] = positions[i + 1] - this.sceneCenter.y;
+				relativePositions[i + 2] = positions[i + 2] - this.sceneCenter.z;
+			}
+			geometry.setAttribute('position', new THREE.BufferAttribute(relativePositions, 3));
+		} else {
+			geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+		}
+		
 		geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
 		const material = this.createPointMaterial();
@@ -602,11 +618,35 @@ export class CopcLayer implements CustomLayerInterface {
 	render(_: WebGLRenderingContext, options: CustomRenderMethodInput) {
 		if (!this.map || !this.renderer) return;
 
-		// Update camera projection matrix
-		const m = new THREE.Matrix4().fromArray(
+		// Update scene center periodically for precision
+		// We don't update it every frame to avoid cache invalidation
+		if (!this.sceneCenter || this.shouldUpdateSceneCenter()) {
+			const center = this.map.getCenter();
+			this.sceneCenter = MercatorCoordinate.fromLngLat(center);
+			
+			// Invalidate cache to rebuild geometries with new center
+			this.clearCache();
+		}
+
+		// Get the original projection matrix from MapLibre
+		const originalMatrix = new THREE.Matrix4().fromArray(
 			options.defaultProjectionData.mainMatrix,
 		);
-		this.camera.projectionMatrix = m;
+		
+		// Create a translation matrix to offset by the scene center
+		// This improves precision by keeping coordinates closer to origin
+		const translationMatrix = new THREE.Matrix4().makeTranslation(
+			this.sceneCenter.x,
+			this.sceneCenter.y,
+			this.sceneCenter.z
+		);
+		
+		// Apply translation first, then projection
+		// P' = P * T where T translates from relative coordinates back to world
+		this.camera.projectionMatrix.multiplyMatrices(
+			originalMatrix,
+			translationMatrix
+		);
 
 		// Update scene based on camera position
 		this.updatePoints();
@@ -616,6 +656,25 @@ export class CopcLayer implements CustomLayerInterface {
 		this.renderer.render(this.scene, this.camera);
 
 		this.map.triggerRepaint();
+	}
+	
+	/**
+	 * Determine if scene center should be updated
+	 * Updates when camera has moved significantly from the scene center
+	 */
+	private shouldUpdateSceneCenter(): boolean {
+		if (!this.sceneCenter || !this.map) return true;
+		
+		const currentCenter = this.map.getCenter();
+		const currentMercator = MercatorCoordinate.fromLngLat(currentCenter);
+		
+		// Calculate distance from current center to scene center
+		const dx = currentMercator.x - this.sceneCenter.x;
+		const dy = currentMercator.y - this.sceneCenter.y;
+		const distance = Math.sqrt(dx * dx + dy * dy);
+		
+		// Update if moved more than 0.1 in Mercator units (significant distance)
+		return distance > 0.1;
 	}
 
 	/**
