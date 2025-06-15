@@ -205,23 +205,12 @@ const infoFolder = gui.addFolder('Layer Info');
 const layerStats = {
 	loaded: 0,
 	visible: 0,
-	cached: 0,
 	isLoading: false,
-	cacheHitRatio: 0,
-	cacheMemoryUsage: 0,
-	pendingRequests: 0,
 };
 
 infoFolder.add(layerStats, 'loaded').name('Loaded Nodes').listen();
 infoFolder.add(layerStats, 'visible').name('Visible Nodes').listen();
-infoFolder.add(layerStats, 'cached').name('Cached Nodes').listen();
 infoFolder.add(layerStats, 'isLoading').name('Is Loading').listen();
-infoFolder.add(layerStats, 'cacheHitRatio').name('Cache Hit Ratio').listen();
-infoFolder
-	.add(layerStats, 'cacheMemoryUsage')
-	.name('Cache Memory (MB)')
-	.listen();
-infoFolder.add(layerStats, 'pendingRequests').name('Pending Requests').listen();
 
 // Update event listeners to save parameters to URL
 pointsFolder
@@ -297,12 +286,7 @@ setInterval(() => {
 		const stats = copcLayer.getNodeStats();
 		layerStats.loaded = stats.loaded;
 		layerStats.visible = stats.visible;
-		layerStats.cached = stats.cached;
 		layerStats.isLoading = copcLayer.isLoading();
-		layerStats.cacheHitRatio = Math.round(stats.cacheHitRatio * 100) / 100; // Round to 2 decimal places
-		layerStats.cacheMemoryUsage =
-			Math.round((stats.cacheMemoryUsage / (1024 * 1024)) * 100) / 100; // Convert to MB
-		layerStats.pendingRequests = stats.pendingRequests;
 	}
 }, 1000);
 

@@ -5,7 +5,7 @@ import {
 	MercatorCoordinate,
 } from 'maplibre-gl';
 import * as THREE from 'three';
-import { CacheManager, CachedNodeData, CacheStats } from './cache-manager';
+import { CacheManager, CachedNodeData } from './cache-manager';
 
 /**
  * Color modes available for point cloud rendering
@@ -46,21 +46,13 @@ const DEFAULT_OPTIONS: Required<CopcLayerOptions> = {
 } as const;
 
 /**
- * Extended node statistics including cache performance
+ * Node statistics
  */
 export interface NodeStats {
 	/** Number of nodes currently loaded and ready for rendering */
 	loaded: number;
 	/** Number of nodes currently visible based on LOD */
 	visible: number;
-	/** Number of nodes cached for reuse */
-	cached: number;
-	/** Cache hit ratio (0-1) */
-	cacheHitRatio: number;
-	/** Cache memory usage in bytes */
-	cacheMemoryUsage: number;
-	/** Number of pending worker requests */
-	pendingRequests: number;
 }
 
 /**
@@ -304,13 +296,6 @@ export class CopcLayer implements CustomLayerInterface {
 		const protectedNodes = new Set(this.visibleNodes);
 		this.cacheManager.set(nodeData, protectedNodes);
 
-		// Log cache performance for debugging
-		if (this.options.enableCacheLogging) {
-			const stats = this.cacheManager.getStats();
-			console.log(
-				`Node ${nodeId} cached. Hit ratio: ${(stats.hitRatio * 100).toFixed(1)}%, Memory: ${this.formatBytes(stats.memoryUsage)}`,
-			);
-		}
 	}
 
 	/**
@@ -733,15 +718,6 @@ export class CopcLayer implements CustomLayerInterface {
 		return material;
 	}
 
-	/**
-	 * Format bytes for human-readable display
-	 */
-	private formatBytes(bytes: number): string {
-		const sizes = ['B', 'KB', 'MB', 'GB'];
-		if (bytes === 0) return '0 B';
-		const i = Math.floor(Math.log(bytes) / Math.log(1024));
-		return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + ' ' + sizes[i];
-	}
 
 	// Public API methods
 
@@ -770,27 +746,15 @@ export class CopcLayer implements CustomLayerInterface {
 	}
 
 	/**
-	 * Get comprehensive node statistics including cache performance
+	 * Get node statistics
 	 */
 	public getNodeStats(): NodeStats {
-		const cacheStats = this.cacheManager.getStats();
-		
 		return {
-			loaded: cacheStats.size,
+			loaded: this.cacheManager.size(),
 			visible: this.visibleNodes.length,
-			cached: cacheStats.size,
-			cacheHitRatio: cacheStats.hitRatio,
-			cacheMemoryUsage: cacheStats.memoryUsage,
-			pendingRequests: this.pendingRequests.size,
 		};
 	}
 
-	/**
-	 * Get detailed cache performance statistics
-	 */
-	public getCacheStats(): Readonly<CacheStats> {
-		return this.cacheManager.getStats();
-	}
 
 	/**
 	 * Clear the cache manually (useful for debugging or memory management)

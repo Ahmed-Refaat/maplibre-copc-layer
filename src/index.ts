@@ -14,7 +14,6 @@ export {
 export { 
 	CacheManager, 
 	type CachedNodeData, 
-	type CacheStats, 
 	type CacheManagerOptions 
 } from './cache-manager';
 

@@ -36,23 +36,6 @@ export interface CachedNodeData {
 	sizeBytes: number;
 }
 
-/**
- * Cache statistics for monitoring performance
- */
-export interface CacheStats {
-	/** Total number of cached items */
-	size: number;
-	/** Number of cache hits */
-	hits: number;
-	/** Number of cache misses */
-	misses: number;
-	/** Cache hit ratio (0-1) */
-	hitRatio: number;
-	/** Total memory usage estimate in bytes */
-	memoryUsage: number;
-	/** Maximum allowed memory usage in bytes */
-	maxMemoryUsage: number;
-}
 
 /**
  * Configuration options for the cache manager
@@ -79,7 +62,7 @@ export interface CacheManagerOptions {
 export class CacheManager {
 	private cache = new Map<string, CachedNodeData>();
 	private accessOrder: string[] = [];
-	private stats: CacheStats;
+	private memoryUsage: number = 0;
 	private options: Required<CacheManagerOptions>;
 	
 	/**
@@ -90,15 +73,6 @@ export class CacheManager {
 			maxNodes: options.maxNodes ?? 100,
 			maxMemoryBytes: options.maxMemoryBytes ?? 100 * 1024 * 1024, // 100MB
 			enableLogging: options.enableLogging ?? false,
-		};
-		
-		this.stats = {
-			size: 0,
-			hits: 0,
-			misses: 0,
-			hitRatio: 0,
-			memoryUsage: 0,
-			maxMemoryUsage: this.options.maxMemoryBytes,
 		};
 		
 		this.log('Cache manager initialized', this.options);
@@ -117,13 +91,8 @@ export class CacheManager {
 			// Update LRU order
 			this.updateAccessOrder(nodeId);
 			data.lastAccessed = Date.now();
-			this.stats.hits++;
-			this.log(`Cache HIT for node ${nodeId}`);
 			return data;
 		}
-		
-		this.stats.misses++;
-		this.log(`Cache MISS for node ${nodeId}`);
 		return null;
 	}
 	
@@ -141,7 +110,7 @@ export class CacheManager {
 		if (existing) {
 			// Dispose old Three.js resources
 			this.disposeNodeResources(existing);
-			this.stats.memoryUsage -= existing.sizeBytes;
+			this.memoryUsage -= existing.sizeBytes;
 		}
 		
 		// Ensure cache size limits before adding
@@ -151,11 +120,9 @@ export class CacheManager {
 		nodeData.lastAccessed = Date.now();
 		this.cache.set(nodeId, nodeData);
 		this.updateAccessOrder(nodeId);
-		this.stats.memoryUsage += nodeData.sizeBytes;
-		this.stats.size = this.cache.size;
+		this.memoryUsage += nodeData.sizeBytes;
 		
 		this.log(`Cached node ${nodeId} (${this.formatBytes(nodeData.sizeBytes)})`);
-		this.updateHitRatio();
 	}
 	
 	/**
@@ -181,8 +148,7 @@ export class CacheManager {
 		this.disposeNodeResources(data);
 		this.cache.delete(nodeId);
 		this.removeFromAccessOrder(nodeId);
-		this.stats.memoryUsage -= data.sizeBytes;
-		this.stats.size = this.cache.size;
+		this.memoryUsage -= data.sizeBytes;
 		
 		this.log(`Removed node ${nodeId} from cache`);
 		return true;
@@ -199,18 +165,11 @@ export class CacheManager {
 		
 		this.cache.clear();
 		this.accessOrder.length = 0;
-		this.stats.memoryUsage = 0;
-		this.stats.size = 0;
+		this.memoryUsage = 0;
 		
 		this.log('Cache cleared');
 	}
 	
-	/**
-	 * Get current cache statistics
-	 */
-	getStats(): Readonly<CacheStats> {
-		return { ...this.stats };
-	}
 	
 	/**
 	 * Update cache configuration
@@ -218,9 +177,6 @@ export class CacheManager {
 	updateOptions(newOptions: Partial<CacheManagerOptions>, protectedNodes?: Set<string>): void {
 		Object.assign(this.options, newOptions);
 		
-		if (newOptions.maxMemoryBytes) {
-			this.stats.maxMemoryUsage = newOptions.maxMemoryBytes;
-		}
 		
 		// Enforce new limits immediately
 		this.ensureCacheLimits(0, protectedNodes);
@@ -232,6 +188,13 @@ export class CacheManager {
 	 */
 	getCachedNodeIds(): string[] {
 		return Array.from(this.cache.keys());
+	}
+	
+	/**
+	 * Get the number of cached items
+	 */
+	size(): number {
+		return this.cache.size;
 	}
 	
 	/**
@@ -294,7 +257,7 @@ export class CacheManager {
 		// Check if we need to make space
 		while (
 			(this.cache.size >= this.options.maxNodes) ||
-			(this.stats.memoryUsage + newItemSize > this.options.maxMemoryBytes)
+			(this.memoryUsage + newItemSize > this.options.maxMemoryBytes)
 		) {
 			if (this.accessOrder.length === 0) break;
 			
@@ -339,13 +302,6 @@ export class CacheManager {
 		}
 	}
 	
-	/**
-	 * Update hit ratio statistics
-	 */
-	private updateHitRatio(): void {
-		const total = this.stats.hits + this.stats.misses;
-		this.stats.hitRatio = total > 0 ? this.stats.hits / total : 0;
-	}
 	
 	/**
 	 * Format bytes for human-readable display
