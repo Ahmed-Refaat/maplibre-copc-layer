@@ -703,6 +703,12 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 		// Update scene based on camera position
 		this.updatePoints();
 
+		// detect resize canvas
+		this.renderer.setSize(
+			this.map.getCanvas().width,
+			this.map.getCanvas().height,
+		);
+
 		// Update EDL render target sizes if needed
 		if (this.options.enableEDL) {
 			this.updateEDLSize();
