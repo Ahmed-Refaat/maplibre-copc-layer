@@ -14,8 +14,8 @@
 	],
 	"scripts": {
 		"build": "vp pack",
-		"build:demo": "vite build --outDir demo --base ./",
-		"dev": "vite dev",
+		"build:demo": "vp build --outDir demo --base ./",
+		"dev": "vp dev",
 		"test": "vp test",
 		"typecheck": "tsc --noEmit",
 		"release": "bumpp",
