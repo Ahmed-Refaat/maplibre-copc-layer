@@ -44,10 +44,10 @@ function lazPerfWasmPlugin(): Plugin {
 		},
 		writeBundle(options) {
 			if (!options.dir) return;
-			const outDir = resolve(options.dir);
-			mkdirSync(outDir, { recursive: true });
+			const assetsDir = resolve(options.dir, 'assets');
+			mkdirSync(assetsDir, { recursive: true });
 			try {
-				copyFileSync(lazPerfWasmSrc, resolve(outDir, 'laz-perf.wasm'));
+				copyFileSync(lazPerfWasmSrc, resolve(assetsDir, 'laz-perf.wasm'));
 			} catch {
 				console.warn('[laz-perf-wasm] Failed to copy laz-perf.wasm');
 			}
