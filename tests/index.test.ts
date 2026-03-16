@@ -1,6 +1,12 @@
 import { expect, test } from 'vite-plus/test'
-import { fn } from '../src'
+import {
+	CacheManager,
+	CopcLayer,
+	computeScreenSpaceError,
+} from '../src'
 
-test('fn', () => {
-  expect(fn()).toBe('Hello, tsdown!')
+test('exports are available', () => {
+	expect(CopcLayer).toBeDefined()
+	expect(CacheManager).toBeDefined()
+	expect(computeScreenSpaceError).toBeDefined()
 })
