@@ -15,7 +15,7 @@ export interface CopcLayerOptions {
 	sseThreshold?: number
 	depthTest?: boolean
 	maxCacheMemory?: number
-	enableCacheLogging?: boolean
+	debug?: boolean
 	enableEDL?: boolean
 	edlStrength?: number
 	edlRadius?: number
@@ -37,7 +37,7 @@ const DEFAULT_OPTIONS: ResolvedOptions = {
 	sseThreshold: 8,
 	depthTest: true,
 	maxCacheMemory: 100 * 1024 * 1024,
-	enableCacheLogging: false,
+	debug: false,
 	enableEDL: false,
 	edlStrength: 0.4,
 	edlRadius: 1.5,
@@ -93,7 +93,7 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 		this.cacheManager = new CacheManager({
 			maxNodes: this.options.maxCacheSize,
 			maxMemoryBytes: this.options.maxCacheMemory,
-			enableLogging: this.options.enableCacheLogging,
+			debug: this.options.debug,
 		})
 
 		this.camera = new THREE.Camera()
@@ -129,7 +129,9 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 					this.updateVisibleNodes()
 					break
 				case 'error':
-					console.error('Worker error:', message.message)
+					if (this.options.debug) {
+						console.error('[CopcLayer] Worker error:', message.message)
+					}
 					break
 			}
 
@@ -137,7 +139,9 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 		}
 
 		this.worker.onerror = (error) => {
-			console.error('Worker error event:', error)
+			if (this.options.debug) {
+				console.error('[CopcLayer] Worker error event:', error)
+			}
 		}
 	}
 
@@ -333,7 +337,7 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 			{
 				maxNodes: this.options.maxCacheSize,
 				maxMemoryBytes: this.options.maxCacheMemory,
-				enableLogging: this.options.enableCacheLogging,
+				debug: this.options.debug,
 			},
 			protectedNodes,
 		)
