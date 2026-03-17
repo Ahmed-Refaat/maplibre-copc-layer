@@ -19,7 +19,7 @@ export interface CachedNodeData {
 export interface CacheManagerOptions {
 	maxNodes?: number
 	maxMemoryBytes?: number
-	enableLogging?: boolean
+	debug?: boolean
 }
 
 export class CacheManager {
@@ -31,7 +31,7 @@ export class CacheManager {
 		this.options = {
 			maxNodes: options.maxNodes ?? 100,
 			maxMemoryBytes: options.maxMemoryBytes ?? 100 * 1024 * 1024,
-			enableLogging: options.enableLogging ?? false,
+			debug: options.debug ?? false,
 		}
 	}
 
@@ -177,7 +177,7 @@ export class CacheManager {
 	}
 
 	private log(message: string): void {
-		if (this.options.enableLogging) {
+		if (this.options.debug) {
 			console.log('[CacheManager]', message)
 		}
 	}

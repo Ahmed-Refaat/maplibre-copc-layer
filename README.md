@@ -69,7 +69,7 @@ new CopcLayer(url: string, options?: CopcLayerOptions, layerId?: string)
 | `depthTest` | `boolean` | `true` | Enable depth testing |
 | `maxCacheSize` | `number` | `100` | Max cached nodes |
 | `maxCacheMemory` | `number` | `104857600` | Max cache memory in bytes (default 100 MB) |
-| `enableCacheLogging` | `boolean` | `false` | Log cache operations |
+| `debug` | `boolean` | `false` | Enable debug logging |
 | `enableEDL` | `boolean` | `false` | Enable Eye-Dome Lighting |
 | `edlStrength` | `number` | `0.4` | EDL strength |
 | `edlRadius` | `number` | `1.5` | EDL radius |
