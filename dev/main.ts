@@ -31,6 +31,7 @@ let copcLayer: CopcLayer | null = null;
 const urlInput = document.getElementById('url-input') as HTMLInputElement;
 const loadBtn = document.getElementById('load-btn') as HTMLButtonElement;
 const statsEl = document.getElementById('stats') as HTMLDivElement;
+const paramsToggle = document.getElementById('params-toggle') as HTMLButtonElement;
 const paramsEl = document.getElementById('params') as HTMLDivElement;
 
 // Parameter controls
@@ -85,6 +86,8 @@ function loadCopc(copcUrl: string) {
 	});
 
 	map.addLayer(copcLayer);
+	paramsToggle.classList.add('visible');
+	paramsToggle.classList.add('open');
 	paramsEl.classList.add('visible');
 }
 
@@ -98,6 +101,12 @@ urlInput.addEventListener('keydown', (e) => {
 		const value = urlInput.value.trim();
 		if (value) loadCopc(value);
 	}
+});
+
+// Toggle params panel
+paramsToggle.addEventListener('click', () => {
+	const isOpen = paramsToggle.classList.toggle('open');
+	paramsEl.classList.toggle('visible', isOpen);
 });
 
 // Parameter event handlers

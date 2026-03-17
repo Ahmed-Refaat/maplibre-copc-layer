@@ -31,7 +31,7 @@
       font-size: 13px;
       margin-bottom: 6px;
     }
-    #controls button {
+    #load-btn {
       width: 100%;
       padding: 6px 12px;
       background: #3b82f6;
@@ -42,7 +42,7 @@
       font-size: 13px;
       font-weight: 500;
     }
-    #controls button:hover { background: #2563eb; }
+    #load-btn:hover { background: #2563eb; }
     #stats {
       margin-top: 8px;
       padding-top: 8px;
@@ -50,11 +50,31 @@
       font-size: 12px;
       color: #666;
     }
-    #params {
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px solid #eee;
+    #params-toggle {
       display: none;
+      margin-top: 8px;
+      width: 100%;
+      background: none;
+      border: none;
+      border-top: 1px solid #eee;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      color: #555;
+      padding: 6px 0;
+      text-align: left;
+    }
+    #params-toggle:hover { color: #333; }
+    #params-toggle.visible { display: block; }
+    #params-toggle .arrow {
+      display: inline-block;
+      transition: transform 0.2s;
+      margin-right: 4px;
+    }
+    #params-toggle.open .arrow { transform: rotate(90deg); }
+    #params {
+      display: none;
+      padding-top: 4px;
     }
     #params.visible { display: block; }
     .param-group { margin-bottom: 6px; }
@@ -95,6 +115,7 @@
     <input id="url-input" type="text" placeholder="Enter COPC file URL (.copc.laz)" />
     <button id="load-btn">Load Point Cloud</button>
     <div id="stats"></div>
+    <button id="params-toggle"><span class="arrow">&#9654;</span> Parameters</button>
     <div id="params">
       <div class="param-section" style="border-top: none; margin-top: 0; padding-top: 0;">Rendering</div>
       <div class="param-group">
