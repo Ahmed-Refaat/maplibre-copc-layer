@@ -50,33 +50,87 @@ describe('computeScreenSpaceError', () => {
 		expect(sseLarge).toBeGreaterThan(sseSmall)
 	})
 
-	test('distance factor reduces SSE', () => {
+	test('maxDistance caps the effective distance', () => {
 		const center: Vec3 = [0, 0, -50]
 		const geometricError = 1.0
 
-		const sseNoFactor = computeScreenSpaceError(
+		const sseNoCap = computeScreenSpaceError(
 			camera,
 			center,
 			fov,
 			geometricError,
 			screenHeight,
-			1.0,
 		)
-		const sseWithFactor = computeScreenSpaceError(
+		const sseCapped = computeScreenSpaceError(
 			camera,
 			center,
 			fov,
 			geometricError,
 			screenHeight,
-			0.5,
+			20, // maxDistance smaller than actual distance (50)
 		)
 
-		expect(sseWithFactor).toBeLessThanOrEqual(sseNoFactor)
+		// Capped distance is smaller, so SSE should be higher
+		expect(sseCapped).toBeGreaterThan(sseNoCap)
+	})
+
+	test('maxDistance has no effect when distance is within limit', () => {
+		const center: Vec3 = [0, 0, -50]
+		const geometricError = 1.0
+
+		const sseNoCap = computeScreenSpaceError(
+			camera,
+			center,
+			fov,
+			geometricError,
+			screenHeight,
+		)
+		const sseHighCap = computeScreenSpaceError(
+			camera,
+			center,
+			fov,
+			geometricError,
+			screenHeight,
+			1000, // maxDistance much larger than actual distance
+		)
+
+		expect(sseHighCap).toBe(sseNoCap)
 	})
 
 	test('returns positive SSE for objects in front of camera', () => {
 		const center: Vec3 = [0, 0, -50]
 		const sse = computeScreenSpaceError(camera, center, fov, 1.0, screenHeight)
 		expect(sse).toBeGreaterThan(0)
+	})
+
+	test('returns reasonable SSE at very high camera altitude with maxDistance', () => {
+		// Simulate Globe View at low zoom: camera at 20,000,000m altitude
+		const highCamera: Vec3 = [500000, 500000, 20000000]
+		const nodeCenter: Vec3 = [500000, 500000, 100]
+		const geometricError = 100 // root node spacing
+		const sseThreshold = 8
+
+		// Without maxDistance cap, SSE approaches 0
+		const sseNoCap = computeScreenSpaceError(
+			highCamera,
+			nodeCenter,
+			fov,
+			geometricError,
+			screenHeight,
+		)
+		expect(sseNoCap).toBeLessThan(sseThreshold)
+
+		// With maxDistance cap (simulating cubeMaxDim * 20), SSE is reasonable
+		const cubeMaxDim = 1000 // 1km cube
+		const maxDistance = cubeMaxDim * 20
+		const sseCapped = computeScreenSpaceError(
+			highCamera,
+			nodeCenter,
+			fov,
+			geometricError,
+			screenHeight,
+			maxDistance,
+		)
+		expect(sseCapped).toBeGreaterThan(sseThreshold)
 	})
 })

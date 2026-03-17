@@ -23,6 +23,7 @@ interface UpdatePointsMessage {
 	mapHeight: number
 	fov: number
 	sseThreshold: number
+	zoom: number
 }
 
 interface CancelRequestsMessage {
@@ -255,11 +256,19 @@ function updatePoints(
 			cameraPosition[2],
 		] as Vec3
 
+		// Cap effective distance based on cube dimensions to prevent SSE
+		// from approaching 0 at very high camera altitudes (Globe View)
+		const cubeMaxDim = Math.max(
+			copc.info.cube[3] - copc.info.cube[0],
+			copc.info.cube[4] - copc.info.cube[1],
+			copc.info.cube[5] - copc.info.cube[2],
+		)
+		const maxDistance = cubeMaxDim * 20
+
 		const visibleNodes: string[] = []
 
 		for (const [nodeId, center] of Object.entries(nodeCenters)) {
 			const depth = Number.parseInt(nodeId.split('-')[0])
-			const distanceFactor = Math.max(0.5, 1.0 - depth * 0.1)
 
 			const sse = computeScreenSpaceError(
 				cameraWorld,
@@ -267,7 +276,7 @@ function updatePoints(
 				fov,
 				copc.info.spacing * 0.5 ** depth,
 				mapHeight,
-				distanceFactor,
+				maxDistance,
 			)
 
 			if (sse > sseThreshold) {
