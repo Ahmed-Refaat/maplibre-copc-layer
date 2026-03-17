@@ -395,16 +395,46 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 			this.clearCache()
 		}
 
+		// Use getMatrixForModel to get a projection that works in both
+		// Mercator and Globe modes. It converts local meter coordinates
+		// to the coordinate space expected by mainMatrix.
+		const centerLngLat = this.sceneCenter.toLngLat()
+		// getMatrixForModel is available on map.transform but not always typed
+		const modelMatrix = (
+			this.map.transform as {
+				getMatrixForModel: (
+					lngLat: [number, number],
+					altitude: number,
+				) => number[]
+			}
+		).getMatrixForModel([centerLngLat.lng, centerLngLat.lat], 0)
+
+		// Build mercatorToLocal: converts Mercator offsets (relative to sceneCenter)
+		// to the local meter coordinate system expected by getMatrixForModel:
+		//   Local X+ = East  (from Mercator dX / s)
+		//   Local Y+ = Up    (from Mercator dZ * EARTH_CIRCUMFERENCE)
+		//   Local Z+ = South (from Mercator dY / s)
+		const s = this.sceneCenter.meterInMercatorCoordinateUnits()
+		const invS = 1.0 / s
+		const earthCircumference = 2 * Math.PI * 6378137.0
+
+		// _tempMatrix1 = mainMatrix
 		this._tempMatrix1.fromArray(options.defaultProjectionData.mainMatrix)
-		this._tempMatrix2.makeTranslation(
-			this.sceneCenter.x,
-			this.sceneCenter.y,
-			this.sceneCenter.z,
+		// _tempMatrix2 = modelMatrix
+		this._tempMatrix2.fromArray(modelMatrix)
+		// _tempMatrix1 = mainMatrix * modelMatrix
+		this._tempMatrix1.multiply(this._tempMatrix2)
+		// _tempMatrix2 = mercatorToLocal (swaps Y↔Z and scales to meters)
+		// prettier-ignore
+		this._tempMatrix2.set(
+			invS, 0,    0,                0,
+			0,    0,    earthCircumference, 0,
+			0,    invS, 0,                0,
+			0,    0,    0,                1,
 		)
-		this.camera.projectionMatrix.multiplyMatrices(
-			this._tempMatrix1,
-			this._tempMatrix2,
-		)
+		// _tempMatrix1 = mainMatrix * modelMatrix * mercatorToLocal
+		this._tempMatrix1.multiply(this._tempMatrix2)
+		this.camera.projectionMatrix.copy(this._tempMatrix1)
 
 		this.updatePoints()
 
