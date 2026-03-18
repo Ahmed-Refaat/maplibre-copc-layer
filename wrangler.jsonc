@@ -1,7 +1,6 @@
 {
 	"name": "maplibre-copc-layer",
 	"main": "worker.js",
-	"compatibility_date": "2024-01-01",
 	"preview_urls": true,
 	"site": {
 		"bucket": "./demo"

@@ -16,7 +16,7 @@ const map = new maplibregl.Map({
 			},
 		},
 		projection: {
-			//type: 'globe',
+			type: 'globe',
 		},
 		layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
 	},
@@ -31,21 +31,37 @@ let copcLayer: CopcLayer | null = null;
 const urlInput = document.getElementById('url-input') as HTMLInputElement;
 const loadBtn = document.getElementById('load-btn') as HTMLButtonElement;
 const statsEl = document.getElementById('stats') as HTMLDivElement;
-const paramsToggle = document.getElementById('params-toggle') as HTMLButtonElement;
+const paramsToggle = document.getElementById(
+	'params-toggle',
+) as HTMLButtonElement;
 const paramsEl = document.getElementById('params') as HTMLDivElement;
 
 // Parameter controls
 const pointSizeInput = document.getElementById('pointSize') as HTMLInputElement;
-const pointSizeVal = document.getElementById('pointSize-val') as HTMLSpanElement;
-const colorModeSelect = document.getElementById('colorMode') as HTMLSelectElement;
-const sseThresholdInput = document.getElementById('sseThreshold') as HTMLInputElement;
-const sseThresholdVal = document.getElementById('sseThreshold-val') as HTMLSpanElement;
+const pointSizeVal = document.getElementById(
+	'pointSize-val',
+) as HTMLSpanElement;
+const colorModeSelect = document.getElementById(
+	'colorMode',
+) as HTMLSelectElement;
+const sseThresholdInput = document.getElementById(
+	'sseThreshold',
+) as HTMLInputElement;
+const sseThresholdVal = document.getElementById(
+	'sseThreshold-val',
+) as HTMLSpanElement;
 const depthTestInput = document.getElementById('depthTest') as HTMLInputElement;
 const enableEDLInput = document.getElementById('enableEDL') as HTMLInputElement;
-const edlStrengthInput = document.getElementById('edlStrength') as HTMLInputElement;
-const edlStrengthVal = document.getElementById('edlStrength-val') as HTMLSpanElement;
+const edlStrengthInput = document.getElementById(
+	'edlStrength',
+) as HTMLInputElement;
+const edlStrengthVal = document.getElementById(
+	'edlStrength-val',
+) as HTMLSpanElement;
 const edlRadiusInput = document.getElementById('edlRadius') as HTMLInputElement;
-const edlRadiusVal = document.getElementById('edlRadius-val') as HTMLSpanElement;
+const edlRadiusVal = document.getElementById(
+	'edlRadius-val',
+) as HTMLSpanElement;
 // Restore COPC URL from query params
 const params = new URLSearchParams(window.location.search);
 const initialUrl = params.get('copc');

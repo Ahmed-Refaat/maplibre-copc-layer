@@ -1,17 +1,27 @@
 # maplibre-copc-layer
 
-A [MapLibre GL JS](https://maplibre.org/) custom layer for rendering [Cloud-Optimized Point Cloud (COPC)](https://copc.io/) data using [Three.js](https://threejs.org/).
+[![npm version](https://img.shields.io/npm/v/maplibre-copc-layer)](https://www.npmjs.com/package/maplibre-copc-layer)
+[![license](https://img.shields.io/npm/l/maplibre-copc-layer)](https://github.com/spatialty-io/maplibre-copc-layer/blob/main/LICENSE)
 
-## Features
+Render massive point clouds on [MapLibre GL JS](https://maplibre.org/) — powered by [COPC](https://copc.io/) and [Three.js](https://threejs.org/).
 
-- MapLibre GL JS custom layer (`CustomLayerInterface`) as a single class
-- Screen-space error (SSE) based level-of-detail
-- Web Worker for COPC parsing and coordinate transformation
-- LRU cache with node count and memory limits
-- Eye-Dome Lighting (EDL) post-processing
-- Color modes: RGB, height, intensity, white
+Stream [Cloud-Optimized Point Cloud (COPC)](https://copc.io/) data directly into MapLibre as a custom layer. Only the tiles visible on screen are fetched and rendered, enabling smooth visualization of billion-point datasets in the browser.
 
-## Installation
+## Highlights
+
+- **Streaming LOD** — Screen-space error (SSE) based level-of-detail fetches only what you see
+- **Web Worker parsing** — COPC decoding and coordinate reprojection run off the main thread
+- **LRU cache** — Configurable node count and memory limits keep the GPU lean
+- **Eye-Dome Lighting** — EDL post-processing for depth perception without normals
+- **Color modes** — RGB, height ramp, intensity, and flat white
+- **Globe support** — Works with MapLibre's Globe projection via the included `GlobeControl`
+- **Zero config** — Drop in a single `CopcLayer` class and go
+
+## Demo
+
+**[Live Demo](https://maplibre-copc-layer.spatialty-io.workers.dev/)**
+
+## Install
 
 ```bash
 npm install maplibre-copc-layer
@@ -23,9 +33,9 @@ Peer dependencies:
 npm install maplibre-gl three
 ```
 
-## Usage
+## Quick Start
 
-```typescript
+```ts
 import maplibregl from 'maplibre-gl';
 import { CopcLayer } from 'maplibre-copc-layer';
 
@@ -36,45 +46,40 @@ const map = new maplibregl.Map({
   zoom: 14,
 });
 
-const copcLayer = new CopcLayer('https://example.com/pointcloud.copc.laz', {
+const layer = new CopcLayer('https://example.com/pointcloud.copc.laz', {
   colorMode: 'rgb',
   pointSize: 4,
-  sseThreshold: 2,
   enableEDL: true,
-  onInitialized: (message) => {
-    map.flyTo({ center: message.center, zoom: 16 });
-  },
+  onInitialized: ({ center }) => map.flyTo({ center, zoom: 16 }),
 });
 
-map.on('load', () => {
-  map.addLayer(copcLayer);
-});
+map.on('load', () => map.addLayer(layer));
 ```
 
 ## API
 
 ### `CopcLayer`
 
-```typescript
+```ts
 new CopcLayer(url: string, options?: CopcLayerOptions, layerId?: string)
 ```
 
-#### `CopcLayerOptions`
+#### Options
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `pointSize` | `number` | `6` | Point size in pixels |
 | `colorMode` | `'rgb' \| 'height' \| 'intensity' \| 'white'` | `'rgb'` | Coloring mode |
-| `sseThreshold` | `number` | `8` | SSE threshold for LOD selection |
+| `sseThreshold` | `number` | `8` | SSE threshold for LOD — lower values load more detail |
 | `depthTest` | `boolean` | `true` | Enable depth testing |
 | `maxCacheSize` | `number` | `100` | Max cached nodes |
-| `maxCacheMemory` | `number` | `104857600` | Max cache memory in bytes (default 100 MB) |
-| `debug` | `boolean` | `false` | Enable debug logging |
+| `maxCacheMemory` | `number` | `104857600` | Max cache memory in bytes (100 MB) |
 | `enableEDL` | `boolean` | `false` | Enable Eye-Dome Lighting |
-| `edlStrength` | `number` | `0.4` | EDL strength |
-| `edlRadius` | `number` | `1.5` | EDL radius |
-| `wasmPath` | `string` | `undefined` | Path to `laz-perf.wasm` |
-| `onInitialized` | `(message) => void` | - | Callback with `{ nodeCount, center }` after COPC header is loaded |
+| `edlStrength` | `number` | `0.4` | EDL effect strength |
+| `edlRadius` | `number` | `1.5` | EDL sampling radius |
+| `wasmPath` | `string` | `undefined` | Custom path to `laz-perf.wasm` |
+| `debug` | `boolean` | `false` | Enable debug logging |
+| `onInitialized` | `(msg) => void` | — | Called with `{ nodeCount, center }` after COPC header loads |
 
 #### Methods
 
@@ -82,34 +87,37 @@ new CopcLayer(url: string, options?: CopcLayerOptions, layerId?: string)
 |---|---|
 | `setPointSize(size)` | Update point size |
 | `setSseThreshold(threshold)` | Update SSE threshold |
-| `setDepthTest(enabled)` | Set depth testing |
-| `setEDLEnabled(enabled)` | Toggle EDL |
+| `setDepthTest(enabled)` | Toggle depth testing |
+| `setEDLEnabled(enabled)` | Toggle Eye-Dome Lighting |
 | `updateEDLParameters({ strength?, radius? })` | Update EDL parameters |
-| `updateCacheConfig(config)` | Update cache options at runtime |
+| `updateCacheConfig(config)` | Update cache limits at runtime |
 | `clearCache()` | Clear all cached nodes |
 | `getPointSize()` | Get current point size |
 | `getColorMode()` | Get current color mode |
 | `getSseThreshold()` | Get current SSE threshold |
 | `getDepthTest()` | Get depth test state |
 | `getEDLParameters()` | Get EDL parameters |
-| `getOptions()` | Get all options |
-| `isLoading()` | Check if data is loading |
-| `getNodeStats()` | Get `{ loaded, visible }` node counts |
+| `getOptions()` | Get all current options |
+| `isLoading()` | Whether data is currently being fetched |
+| `getNodeStats()` | Returns `{ loaded, visible }` node counts |
+
+### `GlobeControl`
+
+A MapLibre `IControl` that toggles between Mercator and Globe projections.
+
+```ts
+import { GlobeControl } from 'maplibre-copc-layer';
+
+map.addControl(new GlobeControl());
+```
 
 ## Development
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Dev server (opens demo app)
-pnpm dev
-
-# Run tests
-pnpm test
-
-# Build library
-pnpm build
+pnpm dev       # Dev server with demo app
+pnpm test      # Run tests
+pnpm build     # Build library
 ```
 
 ## License
