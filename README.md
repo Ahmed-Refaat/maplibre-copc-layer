@@ -14,7 +14,6 @@ Stream [Cloud-Optimized Point Cloud (COPC)](https://copc.io/) data directly into
 - **LRU cache** — Configurable node count and memory limits keep the GPU lean
 - **Eye-Dome Lighting** — EDL post-processing for depth perception without normals
 - **Color modes** — RGB, height ramp, intensity, and flat white
-- **Globe support** — Works with MapLibre's Globe projection via the included `GlobeControl`
 - **Zero config** — Drop in a single `CopcLayer` class and go
 
 ## Demo
