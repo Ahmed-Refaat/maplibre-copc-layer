@@ -32,4 +32,7 @@ export default defineConfig({
 	worker: {
 		format: 'es',
 	},
+	test: {
+		exclude: ['vendor/**', 'node_modules/**'],
+	},
 });
