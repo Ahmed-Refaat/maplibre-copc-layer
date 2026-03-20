@@ -6,7 +6,7 @@ import pointsFragmentShader from './shaders/points.frag.glsl';
 import edlVertexShader from './shaders/edl.vert.glsl';
 import edlFragmentShader from './shaders/edl.frag.glsl';
 import CopcWorker from './worker/index.ts?worker&inline';
-import lazPerfWasmUrl from './assets/laz-perf.wasm?url';
+import lazPerfWasmUrl from '../vendor/laz-perf/js/src/laz-perf.wasm?url';
 
 const EARTH_CIRCUMFERENCE = 2 * Math.PI * 6378137.0;
 const DEG2RAD = Math.PI / 180;

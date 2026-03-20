@@ -1,0 +1,3 @@
+[submodule "vendor/laz-perf"]
+	path = vendor/laz-perf
+	url = https://github.com/hobuinc/laz-perf.git

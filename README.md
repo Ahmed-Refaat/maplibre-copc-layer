@@ -119,6 +119,10 @@ pnpm test      # Run tests
 pnpm build     # Build library
 ```
 
+## Third-Party Notices
+
+This project bundles [laz-perf](https://github.com/hobuinc/laz-perf), which is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
 ## License
 
 MIT
