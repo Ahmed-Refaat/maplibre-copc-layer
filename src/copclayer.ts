@@ -6,6 +6,7 @@ import pointsFragmentShader from './shaders/points.frag.glsl';
 import edlVertexShader from './shaders/edl.vert.glsl';
 import edlFragmentShader from './shaders/edl.frag.glsl';
 import CopcWorker from './worker/index.ts?worker&inline';
+import lazPerfWasmUrl from './assets/laz-perf.wasm?url';
 
 const EARTH_CIRCUMFERENCE = 2 * Math.PI * 6378137.0;
 const DEG2RAD = Math.PI / 180;
@@ -23,16 +24,13 @@ export interface CopcLayerOptions {
 	enableEDL?: boolean;
 	edlStrength?: number;
 	edlRadius?: number;
-	/** Path to laz-perf.wasm file for LAZ decompression */
-	wasmPath?: string;
 	onInitialized?: (message: {
 		nodeCount: number;
 		center: [number, number];
 	}) => void;
 }
 
-type ResolvedOptions = Required<Omit<CopcLayerOptions, 'wasmPath'>> &
-	Pick<CopcLayerOptions, 'wasmPath'>;
+type ResolvedOptions = Required<CopcLayerOptions>;
 
 const DEFAULT_OPTIONS: ResolvedOptions = {
 	pointSize: 6,
@@ -45,7 +43,6 @@ const DEFAULT_OPTIONS: ResolvedOptions = {
 	enableEDL: false,
 	edlStrength: 0.4,
 	edlRadius: 1.5,
-	wasmPath: undefined,
 	onInitialized: () => {},
 } as const;
 
@@ -315,7 +312,7 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 			options: {
 				colorMode: this.options.colorMode,
 				maxCacheSize: this.options.maxCacheSize,
-				wasmPath: this.options.wasmPath,
+				wasmPath: lazPerfWasmUrl,
 			},
 		});
 

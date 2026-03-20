@@ -9,3 +9,8 @@ declare module '*?worker&inline' {
 	}
 	export default WorkerFactory
 }
+
+declare module '*.wasm?url' {
+	const url: string
+	export default url
+}
