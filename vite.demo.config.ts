@@ -18,6 +18,7 @@ export default defineConfig({
 	plugins: [glslPlugin()],
 	build: {
 		outDir: 'demo',
+		assetsInlineLimit: 300000,
 	},
 	worker: {
 		format: 'es',
