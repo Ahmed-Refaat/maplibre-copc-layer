@@ -1,3 +1,4 @@
+import GUI from 'lil-gui';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { CopcLayer, type ColorMode } from '../src/index';
@@ -21,30 +22,30 @@ const CLASSIFICATION_LABELS: Record<number, string> = {
 	18: 'High Noise',
 };
 
-const DEFAULT_CLASSIFICATION_COLORS: Record<number, [number, number, number]> = {
-	0: [0.5, 0.5, 0.5],
-	1: [0.7, 0.7, 0.7],
-	2: [0.6, 0.4, 0.2],
-	3: [0.5, 0.8, 0.5],
-	4: [0.2, 0.7, 0.2],
-	5: [0.0, 0.4, 0.0],
-	6: [1.0, 0.2, 0.2],
-	7: [0.3, 0.3, 0.3],
-	8: [0.6, 0.3, 0.8],
-	9: [0.2, 0.4, 1.0],
-	10: [1.0, 0.6, 0.0],
-	11: [0.9, 0.9, 0.3],
-	12: [0.0, 0.8, 0.8],
-	17: [0.9, 0.5, 0.4],
-	18: [0.5, 0.0, 0.0],
-};
-
-const classificationColors: Record<number, [number, number, number]> = {
-	...DEFAULT_CLASSIFICATION_COLORS,
-};
+const DEFAULT_CLASSIFICATION_COLORS: Record<number, [number, number, number]> =
+	{
+		0: [0.5, 0.5, 0.5],
+		1: [0.7, 0.7, 0.7],
+		2: [0.6, 0.4, 0.2],
+		3: [0.5, 0.8, 0.5],
+		4: [0.2, 0.7, 0.2],
+		5: [0.0, 0.4, 0.0],
+		6: [1.0, 0.2, 0.2],
+		7: [0.3, 0.3, 0.3],
+		8: [0.6, 0.3, 0.8],
+		9: [0.2, 0.4, 1.0],
+		10: [1.0, 0.6, 0.0],
+		11: [0.9, 0.9, 0.3],
+		12: [0.0, 0.8, 0.8],
+		17: [0.9, 0.5, 0.4],
+		18: [0.5, 0.0, 0.0],
+	};
 
 function rgbToHex(r: number, g: number, b: number): string {
-	const toHex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
+	const toHex = (v: number) =>
+		Math.round(v * 255)
+			.toString(16)
+			.padStart(2, '0');
 	return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
@@ -54,6 +55,30 @@ function hexToRgb(hex: string): [number, number, number] {
 	const b = parseInt(hex.slice(5, 7), 16) / 255;
 	return [r, g, b];
 }
+
+// --- State ---
+
+const params = new URLSearchParams(window.location.search);
+
+const state = {
+	url: params.get('copc') ?? '',
+	pointSize: 4,
+	colorMode: 'rgb' as ColorMode,
+	sseThreshold: 2,
+	depthTest: true,
+	enableEDL: true,
+	edlStrength: 5,
+	edlRadius: 1.5,
+	stats: '',
+};
+
+const classificationColors: Record<string, string> = {};
+for (const [code, rgb] of Object.entries(DEFAULT_CLASSIFICATION_COLORS)) {
+	const label = CLASSIFICATION_LABELS[Number(code)] ?? `Class ${code}`;
+	classificationColors[`${code}: ${label}`] = rgbToHex(...rgb);
+}
+
+// --- Map ---
 
 const map = new maplibregl.Map({
 	container: 'map',
@@ -68,9 +93,7 @@ const map = new maplibregl.Map({
 				maxzoom: 18,
 			},
 		},
-		projection: {
-			type: 'globe',
-		},
+		projection: { type: 'globe' },
 		layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
 	},
 	center: [139.7, 35.7],
@@ -81,76 +104,40 @@ const map = new maplibregl.Map({
 
 let copcLayer: CopcLayer | null = null;
 
-const urlInput = document.getElementById('url-input') as HTMLInputElement;
-const loadBtn = document.getElementById('load-btn') as HTMLButtonElement;
-const statsEl = document.getElementById('stats') as HTMLDivElement;
-const paramsToggle = document.getElementById(
-	'params-toggle',
-) as HTMLButtonElement;
-const paramsEl = document.getElementById('params') as HTMLDivElement;
-const legendEl = document.getElementById('classification-legend') as HTMLDivElement;
-
-// Parameter controls
-const pointSizeInput = document.getElementById('pointSize') as HTMLInputElement;
-const pointSizeVal = document.getElementById(
-	'pointSize-val',
-) as HTMLSpanElement;
-const colorModeSelect = document.getElementById(
-	'colorMode',
-) as HTMLSelectElement;
-const sseThresholdInput = document.getElementById(
-	'sseThreshold',
-) as HTMLInputElement;
-const sseThresholdVal = document.getElementById(
-	'sseThreshold-val',
-) as HTMLSpanElement;
-const depthTestInput = document.getElementById('depthTest') as HTMLInputElement;
-const enableEDLInput = document.getElementById('enableEDL') as HTMLInputElement;
-const edlStrengthInput = document.getElementById(
-	'edlStrength',
-) as HTMLInputElement;
-const edlStrengthVal = document.getElementById(
-	'edlStrength-val',
-) as HTMLSpanElement;
-const edlRadiusInput = document.getElementById('edlRadius') as HTMLInputElement;
-const edlRadiusVal = document.getElementById(
-	'edlRadius-val',
-) as HTMLSpanElement;
-// Restore COPC URL from query params
-const params = new URLSearchParams(window.location.search);
-const initialUrl = params.get('copc');
-if (initialUrl) {
-	urlInput.value = initialUrl;
+function getClassificationColorsMap(): Record<
+	number,
+	[number, number, number]
+> {
+	const result: Record<number, [number, number, number]> = {};
+	for (const [key, hex] of Object.entries(classificationColors)) {
+		const code = Number(key.split(':')[0]);
+		result[code] = hexToRgb(hex);
+	}
+	return result;
 }
 
-function loadCopc(copcUrl: string) {
+function loadCopc() {
+	const copcUrl = state.url.trim();
+	if (!copcUrl) return;
+
 	if (copcLayer) {
 		map.removeLayer(copcLayer.id);
 		copcLayer = null;
 	}
 
-	// Save to URL params
 	const url = new URL(window.location.href);
 	url.searchParams.set('copc', copcUrl);
 	window.history.replaceState({}, '', url);
 
-	const pointSize = Number(pointSizeInput.value);
-	const colorMode = colorModeSelect.value as ColorMode;
-	const sseThreshold = Number(sseThresholdInput.value);
-	const depthTest = depthTestInput.checked;
-	const enableEDL = enableEDLInput.checked;
-	const edlStrength = Number(edlStrengthInput.value);
-	const edlRadius = Number(edlRadiusInput.value);
-
 	copcLayer = new CopcLayer(copcUrl, {
-		pointSize,
-		colorMode,
-		classificationColors,
-		sseThreshold,
-		depthTest,
-		enableEDL,
-		edlStrength,
-		edlRadius,
+		pointSize: state.pointSize,
+		colorMode: state.colorMode,
+		classificationColors: getClassificationColorsMap(),
+		sseThreshold: state.sseThreshold,
+		depthTest: state.depthTest,
+		enableEDL: state.enableEDL,
+		edlStrength: state.edlStrength,
+		edlRadius: state.edlRadius,
 		debug: true,
 		onInitialized: (message) => {
 			map.flyTo({ center: message.center, zoom: 16 });
@@ -158,115 +145,96 @@ function loadCopc(copcUrl: string) {
 	});
 
 	map.addLayer(copcLayer);
-	paramsToggle.classList.add('visible');
-	paramsToggle.classList.add('open');
-	paramsEl.classList.add('visible');
 }
 
-loadBtn.addEventListener('click', () => {
-	const value = urlInput.value.trim();
-	if (value) loadCopc(value);
-});
+// --- GUI ---
 
-urlInput.addEventListener('keydown', (e) => {
-	if (e.key === 'Enter') {
-		const value = urlInput.value.trim();
-		if (value) loadCopc(value);
-	}
-});
+const guiContainer = document.createElement('div');
+guiContainer.style.cssText = 'position:absolute;top:0;left:0;z-index:1000;';
+document.body.appendChild(guiContainer);
 
-// Toggle params panel
-paramsToggle.addEventListener('click', () => {
-	const isOpen = paramsToggle.classList.toggle('open');
-	paramsEl.classList.toggle('visible', isOpen);
-});
+const gui = new GUI({ title: 'COPC Viewer', container: guiContainer });
+gui.domElement.style.setProperty('--name-width', '120px');
+gui.domElement.style.maxWidth = '100%';
+gui.domElement.style.width = '480px';
 
-// Parameter event handlers
-pointSizeInput.addEventListener('input', () => {
-	const v = Number(pointSizeInput.value);
-	pointSizeVal.textContent = String(v);
-	copcLayer?.setPointSize(v);
-});
+gui.add(state, 'url').name('URL').onFinishChange(loadCopc);
+gui.add({ load: loadCopc }, 'load').name('Load Point Cloud');
+gui.add(state, 'stats').name('Stats').listen().disable();
 
-function buildClassificationLegend() {
-	legendEl.innerHTML = '';
-	const codes = Object.keys(classificationColors).map(Number).sort((a, b) => a - b);
-	for (const code of codes) {
-		const [r, g, b] = classificationColors[code];
-		const item = document.createElement('div');
-		item.className = 'legend-item';
+const rendering = gui.addFolder('Rendering');
+rendering
+	.add(state, 'pointSize', 1, 20, 1)
+	.name('Point Size')
+	.onChange((v: number) => {
+		copcLayer?.setPointSize(v);
+	});
+rendering
+	.add(state, 'colorMode', [
+		'rgb',
+		'height',
+		'intensity',
+		'classification',
+		'white',
+	])
+	.name('Color Mode')
+	.onChange(() => {
+		classificationFolder.show(state.colorMode === 'classification');
+		loadCopc();
+	});
+rendering
+	.add(state, 'sseThreshold', 1, 20, 1)
+	.name('SSE Threshold')
+	.onChange((v: number) => {
+		copcLayer?.setSseThreshold(v);
+	});
+rendering
+	.add(state, 'depthTest')
+	.name('Depth Test')
+	.onChange((v: boolean) => {
+		copcLayer?.setDepthTest(v);
+	});
 
-		const picker = document.createElement('input');
-		picker.type = 'color';
-		picker.value = rgbToHex(r, g, b);
-		picker.addEventListener('input', () => {
-			classificationColors[code] = hexToRgb(picker.value);
-			const copcUrl = urlInput.value.trim();
-			if (copcUrl) loadCopc(copcUrl);
-		});
+const edl = gui.addFolder('Eye-Dome Lighting');
+edl
+	.add(state, 'enableEDL')
+	.name('Enable')
+	.onChange((v: boolean) => {
+		copcLayer?.setEDLEnabled(v);
+	});
+edl
+	.add(state, 'edlStrength', 0, 10, 0.1)
+	.name('Strength')
+	.onChange((v: number) => {
+		copcLayer?.updateEDLParameters({ strength: v });
+	});
+edl
+	.add(state, 'edlRadius', 0, 5, 0.1)
+	.name('Radius')
+	.onChange((v: number) => {
+		copcLayer?.updateEDLParameters({ radius: v });
+	});
 
-		const label = document.createElement('span');
-		label.textContent = `${code}: ${CLASSIFICATION_LABELS[code] ?? 'Unknown'}`;
-
-		item.appendChild(picker);
-		item.appendChild(label);
-		legendEl.appendChild(item);
-	}
+const classificationFolder = gui.addFolder('Classification Colors');
+for (const key of Object.keys(classificationColors)) {
+	classificationFolder.addColor(classificationColors, key).onChange(loadCopc);
 }
+classificationFolder.show(state.colorMode === 'classification');
 
-function updateLegendVisibility() {
-	const isClassification = colorModeSelect.value === 'classification';
-	legendEl.classList.toggle('visible', isClassification);
-}
+// --- Init ---
 
-colorModeSelect.addEventListener('change', () => {
-	updateLegendVisibility();
-	const value = urlInput.value.trim();
-	if (value) loadCopc(value);
-});
-
-sseThresholdInput.addEventListener('input', () => {
-	const v = Number(sseThresholdInput.value);
-	sseThresholdVal.textContent = String(v);
-	copcLayer?.setSseThreshold(v);
-});
-
-depthTestInput.addEventListener('change', () => {
-	copcLayer?.setDepthTest(depthTestInput.checked);
-});
-
-enableEDLInput.addEventListener('change', () => {
-	copcLayer?.setEDLEnabled(enableEDLInput.checked);
-});
-
-edlStrengthInput.addEventListener('input', () => {
-	const v = Number(edlStrengthInput.value);
-	edlStrengthVal.textContent = String(v);
-	copcLayer?.updateEDLParameters({ strength: v });
-});
-
-edlRadiusInput.addEventListener('input', () => {
-	const v = Number(edlRadiusInput.value);
-	edlRadiusVal.textContent = String(v);
-	copcLayer?.updateEDLParameters({ radius: v });
-});
-
-buildClassificationLegend();
 map.addControl(new GlobeControl());
 
 map.on('load', () => {
-	if (initialUrl) {
-		loadCopc(initialUrl);
-	}
+	if (state.url) loadCopc();
 });
 
-// Update stats display
 setInterval(() => {
 	if (copcLayer) {
 		const stats = copcLayer.getNodeStats();
 		const loading = copcLayer.isLoading();
-		statsEl.textContent = `Nodes: ${stats.visible} visible / ${stats.loaded} cached${loading ? ' (loading...)' : ''}`;
+		state.stats = `Nodes: ${stats.visible} visible / ${stats.loaded} cached${loading ? ' (loading...)' : ''}`;
 	} else {
-		statsEl.textContent = '';
+		state.stats = '';
 	}
 }, 1000);
