@@ -72,10 +72,9 @@ const state = {
 	stats: '',
 };
 
-const classificationColors: Record<string, string> = {};
+const classificationHexColors: Record<string, string> = {};
 for (const [code, rgb] of Object.entries(DEFAULT_CLASSIFICATION_COLORS)) {
-	const label = CLASSIFICATION_LABELS[Number(code)] ?? `Class ${code}`;
-	classificationColors[`${code}: ${label}`] = rgbToHex(...rgb);
+	classificationHexColors[code] = rgbToHex(...rgb);
 }
 
 // --- Map ---
@@ -109,9 +108,8 @@ function getClassificationColorsMap(): Record<
 	[number, number, number]
 > {
 	const result: Record<number, [number, number, number]> = {};
-	for (const [key, hex] of Object.entries(classificationColors)) {
-		const code = Number(key.split(':')[0]);
-		result[code] = hexToRgb(hex);
+	for (const [code, hex] of Object.entries(classificationHexColors)) {
+		result[Number(code)] = hexToRgb(hex);
 	}
 	return result;
 }
@@ -216,8 +214,13 @@ edl
 	});
 
 const classificationFolder = gui.addFolder('Classification Colors');
-for (const key of Object.keys(classificationColors)) {
-	classificationFolder.addColor(classificationColors, key).onChange(loadCopc);
+for (const code of Object.keys(classificationHexColors)) {
+	const num = Number(code);
+	const label = CLASSIFICATION_LABELS[num] ?? `Class ${code}`;
+	classificationFolder
+		.addColor(classificationHexColors, code)
+		.name(`${code}: ${label}`)
+		.onChange(loadCopc);
 }
 classificationFolder.show(state.colorMode === 'classification');
 

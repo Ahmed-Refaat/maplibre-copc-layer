@@ -6,7 +6,7 @@ import pointsFragmentShader from './shaders/points.frag.glsl';
 import edlVertexShader from './shaders/edl.vert.glsl';
 import edlFragmentShader from './shaders/edl.frag.glsl';
 import CopcWorker from './worker/index.ts?worker&inline';
-import lazPerfWasmUrl from '../vendor/laz-perf/js/src/laz-perf.wasm?url';
+import { DEFAULT_CLASSIFICATION_COLORS } from './constants';
 
 const EARTH_CIRCUMFERENCE = 2 * Math.PI * 6378137.0;
 const DEG2RAD = Math.PI / 180;
@@ -36,7 +36,7 @@ type ResolvedOptions = Required<CopcLayerOptions>;
 const DEFAULT_OPTIONS: ResolvedOptions = {
 	pointSize: 6,
 	colorMode: 'rgb',
-	classificationColors: {},
+	classificationColors: { ...DEFAULT_CLASSIFICATION_COLORS },
 	maxCacheSize: 100,
 	sseThreshold: 8,
 	depthTest: true,
@@ -314,8 +314,6 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 			options: {
 				colorMode: this.options.colorMode,
 				classificationColors: this.options.classificationColors,
-				maxCacheSize: this.options.maxCacheSize,
-				wasmPath: lazPerfWasmUrl,
 			},
 		});
 
