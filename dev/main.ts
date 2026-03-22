@@ -1,7 +1,12 @@
 import GUI from 'lil-gui';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { CopcLayer, type ColorMode, type PointFilter } from '../src/index';
+import {
+	CopcLayer,
+	type ColorMode,
+	type ColorExpression,
+	type PointFilter,
+} from '../src/index';
 import { GlobeControl } from './globe-control';
 
 const CLASSIFICATION_LABELS: Record<number, string> = {
@@ -56,6 +61,23 @@ function hexToRgb(hex: string): [number, number, number] {
 	return [r, g, b];
 }
 
+interface ColorStop {
+	value: number;
+	color: string;
+}
+
+function buildColorExpression(
+	mode: 'linear' | 'discrete',
+	stops: ColorStop[],
+): ColorExpression {
+	const expr: (string | number | [number, number, number])[] = [mode];
+	for (const stop of stops) {
+		expr.push(stop.value);
+		expr.push(hexToRgb(stop.color));
+	}
+	return expr as unknown as ColorExpression;
+}
+
 // --- State ---
 
 const params = new URLSearchParams(window.location.search);
@@ -91,6 +113,19 @@ const filterState = {
 	bboxMaxY: 0,
 	bboxMinZ: 0,
 	bboxMaxZ: 0,
+};
+
+const heightColorState = {
+	mode: 'linear' as 'linear' | 'discrete',
+	stops: [] as ColorStop[],
+};
+
+const intensityColorState = {
+	mode: 'linear' as 'linear' | 'discrete',
+	stops: [
+		{ value: 0, color: '#000000' },
+		{ value: 1, color: '#ffffff' },
+	] as ColorStop[],
 };
 
 let bboxBounds: {
@@ -201,6 +236,17 @@ function loadCopc() {
 	copcLayer = new CopcLayer(copcUrl, {
 		pointSize: state.pointSize,
 		colorMode: state.colorMode,
+		heightColor:
+			heightColorState.stops.length >= 2
+				? buildColorExpression(
+						heightColorState.mode,
+						heightColorState.stops,
+					)
+				: undefined,
+		intensityColor: buildColorExpression(
+			intensityColorState.mode,
+			intensityColorState.stops,
+		),
 		classificationColors: getClassificationColorsMap(),
 		sseThreshold: state.sseThreshold,
 		depthTest: state.depthTest,
@@ -219,6 +265,17 @@ function loadCopc() {
 				zoom: 16,
 			});
 			setupBboxSliders(bounds);
+			if (heightColorState.stops.length === 0) {
+				heightColorState.stops = [
+					{ value: bounds.minz, color: '#0000ff' },
+					{
+						value: (bounds.minz + bounds.maxz) / 2,
+						color: '#ffff00',
+					},
+					{ value: bounds.maxz, color: '#ff0000' },
+				];
+			}
+			rebuildHeightColorFolder(bounds.minz, bounds.maxz);
 		},
 	});
 
@@ -258,6 +315,8 @@ rendering
 	.name('Color Mode')
 	.onChange(() => {
 		classificationFolder.show(state.colorMode === 'classification');
+		heightColorFolder.show(state.colorMode === 'height');
+		intensityColorFolder.show(state.colorMode === 'intensity');
 		loadCopc();
 	});
 rendering
@@ -303,6 +362,124 @@ for (const code of Object.keys(classificationHexColors)) {
 		.onChange(loadCopc);
 }
 classificationFolder.show(state.colorMode === 'classification');
+
+// --- Height Color ---
+
+let heightColorFolder = gui.addFolder('Height Color');
+heightColorFolder.show(state.colorMode === 'height');
+
+function rebuildHeightColorFolder(minz: number, maxz: number) {
+	heightColorFolder.destroy();
+	heightColorFolder = gui.addFolder('Height Color');
+	heightColorFolder.show(state.colorMode === 'height');
+
+	const step = Math.max(0.01, (maxz - minz) / 1000);
+
+	heightColorFolder
+		.add(heightColorState, 'mode', ['linear', 'discrete'])
+		.name('Mode')
+		.onChange(loadCopc);
+
+	for (let idx = 0; idx < heightColorState.stops.length; idx++) {
+		const stop = heightColorState.stops[idx];
+		const stopFolder = heightColorFolder.addFolder(`Stop ${idx + 1}`);
+		stopFolder
+			.add(stop, 'value', minz, maxz, step)
+			.name('Height (m)')
+			.onChange(loadCopc);
+		stopFolder.addColor(stop, 'color').name('Color').onChange(loadCopc);
+	}
+
+	heightColorFolder
+		.add(
+			{
+				add: () => {
+					heightColorState.stops.push({
+						value: maxz,
+						color: '#ffffff',
+					});
+					rebuildHeightColorFolder(minz, maxz);
+					loadCopc();
+				},
+			},
+			'add',
+		)
+		.name('+ Add Stop');
+
+	if (heightColorState.stops.length > 2) {
+		heightColorFolder
+			.add(
+				{
+					remove: () => {
+						heightColorState.stops.pop();
+						rebuildHeightColorFolder(minz, maxz);
+						loadCopc();
+					},
+				},
+				'remove',
+			)
+			.name('- Remove Last Stop');
+	}
+}
+
+// --- Intensity Color ---
+
+let intensityColorFolder = gui.addFolder('Intensity Color');
+intensityColorFolder.show(state.colorMode === 'intensity');
+
+function rebuildIntensityColorFolder() {
+	intensityColorFolder.destroy();
+	intensityColorFolder = gui.addFolder('Intensity Color');
+	intensityColorFolder.show(state.colorMode === 'intensity');
+
+	intensityColorFolder
+		.add(intensityColorState, 'mode', ['linear', 'discrete'])
+		.name('Mode')
+		.onChange(loadCopc);
+
+	for (let idx = 0; idx < intensityColorState.stops.length; idx++) {
+		const stop = intensityColorState.stops[idx];
+		const stopFolder = intensityColorFolder.addFolder(`Stop ${idx + 1}`);
+		stopFolder
+			.add(stop, 'value', 0, 1, 0.01)
+			.name('Intensity')
+			.onChange(loadCopc);
+		stopFolder.addColor(stop, 'color').name('Color').onChange(loadCopc);
+	}
+
+	intensityColorFolder
+		.add(
+			{
+				add: () => {
+					intensityColorState.stops.push({
+						value: 1,
+						color: '#ffffff',
+					});
+					rebuildIntensityColorFolder();
+					loadCopc();
+				},
+			},
+			'add',
+		)
+		.name('+ Add Stop');
+
+	if (intensityColorState.stops.length > 2) {
+		intensityColorFolder
+			.add(
+				{
+					remove: () => {
+						intensityColorState.stops.pop();
+						rebuildIntensityColorFolder();
+						loadCopc();
+					},
+				},
+				'remove',
+			)
+			.name('- Remove Last Stop');
+	}
+}
+
+rebuildIntensityColorFolder();
 
 const filterFolder = gui.addFolder('Filters');
 
