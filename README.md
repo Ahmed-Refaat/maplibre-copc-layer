@@ -55,6 +55,8 @@ map.on('load', () => map.addLayer(layer));
 | `pointSize` | `number` | `6` | Point size in pixels |
 | `colorMode` | `'rgb' \| 'height' \| 'intensity' \| 'classification' \| 'white'` | `'rgb'` | Coloring mode |
 | `classificationColors` | `Record<number, [number, number, number]>` | `{}` | Override or add classification code colors (0–1 RGB). Merged with ASPRS defaults |
+| `filter` | `PointFilter` | `{}` | Filter points by classification or intensity range |
+| `alwaysShowRoot` | `boolean` | `false` | Always show root node even when SSE is below threshold |
 | `sseThreshold` | `number` | `8` | SSE threshold for LOD — lower loads more detail |
 | `depthTest` | `boolean` | `true` | Enable depth testing |
 | `maxCacheSize` | `number` | `100` | Max cached nodes |
@@ -74,6 +76,8 @@ map.on('load', () => map.addLayer(layer));
 | `setDepthTest(enabled)` | Toggle depth testing |
 | `setEDLEnabled(enabled)` | Toggle Eye-Dome Lighting |
 | `updateEDLParameters({ strength?, radius? })` | Update EDL parameters |
+| `setFilter(filter)` | Update point filter (classification / intensity) |
+| `getFilter()` | Get current point filter |
 | `updateCacheConfig(config)` | Update cache limits at runtime |
 | `clearCache()` | Clear all cached nodes |
 | `isLoading()` | Whether data is currently being fetched |
