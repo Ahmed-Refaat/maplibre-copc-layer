@@ -67,6 +67,10 @@ export class CacheManager {
 		this.log(`Cached node ${nodeId} (${this.formatBytes(nodeData.sizeBytes)})`)
 	}
 
+	peek(nodeId: string): CachedNodeData | null {
+		return this.cache.get(nodeId) ?? null
+	}
+
 	has(nodeId: string): boolean {
 		return this.cache.has(nodeId)
 	}

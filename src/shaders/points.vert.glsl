@@ -1,5 +1,3 @@
-#define MAX_COLOR_STOPS 16
-
 uniform float size;
 uniform float scale;
 

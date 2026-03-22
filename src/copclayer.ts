@@ -415,7 +415,7 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 		const exprUniforms = parseColorExpressionUniforms(expr);
 
 		for (const nodeId of this.cacheManager.getCachedNodeIds()) {
-			const nodeData = this.cacheManager.get(nodeId);
+			const nodeData = this.cacheManager.peek(nodeId);
 			if (!nodeData?.points) continue;
 			const mat = nodeData.points.material as THREE.ShaderMaterial;
 			mat.uniforms.colorComputeMode.value = modeValue;
@@ -827,6 +827,9 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 		const exprUniforms = parseColorExpressionUniforms(expr);
 
 		return new THREE.ShaderMaterial({
+			defines: {
+				MAX_COLOR_STOPS: MAX_COLOR_STOPS,
+			},
 			uniforms: {
 				size: { value: this.options.pointSize },
 				scale: { value: window.devicePixelRatio },
@@ -995,14 +998,8 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 		this.classificationFilterTexture.needsUpdate = true;
 	}
 
-	private createClassificationColorTexture(): THREE.DataTexture {
-		const data = new Uint8Array(256 * 4);
-		for (let i = 0; i < 256; i++) {
-			data[i * 4] = 255;
-			data[i * 4 + 1] = 255;
-			data[i * 4 + 2] = 255;
-			data[i * 4 + 3] = 255;
-		}
+	private populateClassificationColorData(data: Uint8Array): void {
+		data.fill(255);
 		const colors = this.options.classificationColors;
 		for (const [code, rgb] of Object.entries(colors)) {
 			const idx = Number(code);
@@ -1013,6 +1010,11 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 				data[idx * 4 + 3] = 255;
 			}
 		}
+	}
+
+	private createClassificationColorTexture(): THREE.DataTexture {
+		const data = new Uint8Array(256 * 4);
+		this.populateClassificationColorData(data);
 		const texture = new THREE.DataTexture(
 			data,
 			256,
@@ -1026,22 +1028,7 @@ export class CopcLayer implements maplibregl.CustomLayerInterface {
 
 	private updateClassificationColorTexture(): void {
 		const data = this.classificationColorTexture.image.data as Uint8Array;
-		for (let i = 0; i < 256; i++) {
-			data[i * 4] = 255;
-			data[i * 4 + 1] = 255;
-			data[i * 4 + 2] = 255;
-			data[i * 4 + 3] = 255;
-		}
-		const colors = this.options.classificationColors;
-		for (const [code, rgb] of Object.entries(colors)) {
-			const idx = Number(code);
-			if (idx >= 0 && idx < 256) {
-				data[idx * 4] = Math.round(rgb[0] * 255);
-				data[idx * 4 + 1] = Math.round(rgb[1] * 255);
-				data[idx * 4 + 2] = Math.round(rgb[2] * 255);
-				data[idx * 4 + 3] = 255;
-			}
-		}
+		this.populateClassificationColorData(data);
 		this.classificationColorTexture.needsUpdate = true;
 	}
 }
