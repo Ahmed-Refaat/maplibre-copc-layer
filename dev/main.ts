@@ -317,7 +317,7 @@ rendering
 		classificationFolder.show(state.colorMode === 'classification');
 		heightColorFolder.show(state.colorMode === 'height');
 		intensityColorFolder.show(state.colorMode === 'intensity');
-		loadCopc();
+		copcLayer?.setColorMode(state.colorMode);
 	});
 rendering
 	.add(state, 'sseThreshold', 1, 20, 1)
@@ -359,9 +359,28 @@ for (const code of Object.keys(classificationHexColors)) {
 	classificationFolder
 		.addColor(classificationHexColors, code)
 		.name(`${code}: ${label}`)
-		.onChange(loadCopc);
+		.onChange(() => {
+			copcLayer?.setClassificationColors(getClassificationColorsMap());
+		});
 }
 classificationFolder.show(state.colorMode === 'classification');
+
+function applyHeightColor() {
+	if (!copcLayer || heightColorState.stops.length < 2) return;
+	copcLayer.setHeightColor(
+		buildColorExpression(heightColorState.mode, heightColorState.stops),
+	);
+}
+
+function applyIntensityColor() {
+	if (!copcLayer) return;
+	copcLayer.setIntensityColor(
+		buildColorExpression(
+			intensityColorState.mode,
+			intensityColorState.stops,
+		),
+	);
+}
 
 // --- Height Color ---
 
@@ -378,7 +397,7 @@ function rebuildHeightColorFolder(minz: number, maxz: number) {
 	heightColorFolder
 		.add(heightColorState, 'mode', ['linear', 'discrete'])
 		.name('Mode')
-		.onChange(loadCopc);
+		.onChange(applyHeightColor);
 
 	for (let idx = 0; idx < heightColorState.stops.length; idx++) {
 		const stop = heightColorState.stops[idx];
@@ -386,8 +405,11 @@ function rebuildHeightColorFolder(minz: number, maxz: number) {
 		stopFolder
 			.add(stop, 'value', minz, maxz, step)
 			.name('Height (m)')
-			.onChange(loadCopc);
-		stopFolder.addColor(stop, 'color').name('Color').onChange(loadCopc);
+			.onChange(applyHeightColor);
+		stopFolder
+			.addColor(stop, 'color')
+			.name('Color')
+			.onChange(applyHeightColor);
 	}
 
 	heightColorFolder
@@ -399,7 +421,7 @@ function rebuildHeightColorFolder(minz: number, maxz: number) {
 						color: '#ffffff',
 					});
 					rebuildHeightColorFolder(minz, maxz);
-					loadCopc();
+					applyHeightColor();
 				},
 			},
 			'add',
@@ -413,7 +435,7 @@ function rebuildHeightColorFolder(minz: number, maxz: number) {
 					remove: () => {
 						heightColorState.stops.pop();
 						rebuildHeightColorFolder(minz, maxz);
-						loadCopc();
+						applyHeightColor();
 					},
 				},
 				'remove',
@@ -435,7 +457,7 @@ function rebuildIntensityColorFolder() {
 	intensityColorFolder
 		.add(intensityColorState, 'mode', ['linear', 'discrete'])
 		.name('Mode')
-		.onChange(loadCopc);
+		.onChange(applyIntensityColor);
 
 	for (let idx = 0; idx < intensityColorState.stops.length; idx++) {
 		const stop = intensityColorState.stops[idx];
@@ -443,8 +465,11 @@ function rebuildIntensityColorFolder() {
 		stopFolder
 			.add(stop, 'value', 0, 1, 0.01)
 			.name('Intensity')
-			.onChange(loadCopc);
-		stopFolder.addColor(stop, 'color').name('Color').onChange(loadCopc);
+			.onChange(applyIntensityColor);
+		stopFolder
+			.addColor(stop, 'color')
+			.name('Color')
+			.onChange(applyIntensityColor);
 	}
 
 	intensityColorFolder
@@ -456,7 +481,7 @@ function rebuildIntensityColorFolder() {
 						color: '#ffffff',
 					});
 					rebuildIntensityColorFolder();
-					loadCopc();
+					applyIntensityColor();
 				},
 			},
 			'add',
@@ -470,7 +495,7 @@ function rebuildIntensityColorFolder() {
 					remove: () => {
 						intensityColorState.stops.pop();
 						rebuildIntensityColorFolder();
-						loadCopc();
+						applyIntensityColor();
 					},
 				},
 				'remove',

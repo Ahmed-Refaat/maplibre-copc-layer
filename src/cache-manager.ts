@@ -4,13 +4,13 @@ export interface CachedNodeData {
 	nodeId: string
 	positions: Float64Array
 	colors: Float32Array
+	heights: Float32Array
 	classifications: Uint8Array
 	intensities: Float32Array
 	pointCount: number
 	geometry?: THREE.BufferGeometry
 	points?: THREE.Points
 	materialConfig: {
-		colorMode: string
 		pointSize: number
 		depthTest: boolean
 	}
@@ -110,21 +110,24 @@ export class CacheManager {
 	static estimateNodeSize(
 		positions: Float64Array | Float32Array,
 		colors: Float32Array,
+		heights: Float32Array,
 		classifications: Uint8Array,
 		intensities: Float32Array,
 	): number {
 		const positionSize =
 			positions.length * (positions instanceof Float64Array ? 8 : 4)
 		const colorSize = colors.length * 4
+		const heightSize = heights.length * 4
 		const classificationSize = classifications.length
 		const intensitySize = intensities.length * 4
-		return positionSize + colorSize + classificationSize + intensitySize + 1024
+		return positionSize + colorSize + heightSize + classificationSize + intensitySize + 1024
 	}
 
 	static createNodeData(
 		nodeId: string,
 		positions: Float64Array,
 		colors: Float32Array,
+		heights: Float32Array,
 		classifications: Uint8Array,
 		intensities: Float32Array,
 		materialConfig: CachedNodeData['materialConfig'],
@@ -133,12 +136,13 @@ export class CacheManager {
 			nodeId,
 			positions: new Float64Array(positions),
 			colors: new Float32Array(colors),
+			heights: new Float32Array(heights),
 			classifications: new Uint8Array(classifications),
 			intensities: new Float32Array(intensities),
 			pointCount: positions.length / 3,
 			materialConfig: { ...materialConfig },
 			lastAccessed: Date.now(),
-			sizeBytes: CacheManager.estimateNodeSize(positions, colors, classifications, intensities),
+			sizeBytes: CacheManager.estimateNodeSize(positions, colors, heights, classifications, intensities),
 		}
 	}
 
