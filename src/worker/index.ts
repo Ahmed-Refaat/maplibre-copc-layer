@@ -8,8 +8,6 @@ interface InitMessage {
 	type: 'init';
 	url: string;
 	options?: {
-		colorMode?: 'rgb' | 'height' | 'intensity' | 'classification' | 'white';
-		classificationColors?: Record<number, [number, number, number]>;
 		alwaysShowRoot?: boolean;
 	};
 }
@@ -45,12 +43,8 @@ let proj: Converter;
 let nodes: Hierarchy.Node.Map = {};
 let nodeCenters: Record<string, Vec3> = {};
 let url: string;
-let colorMode: 'rgb' | 'height' | 'intensity' | 'classification' | 'white' =
-	'rgb';
 let alwaysShowRoot = false;
 const cancelledRequests = new Set<string>();
-
-let classificationColors: Record<number, [number, number, number]> = {};
 
 function calcCubeCenter(
 	cube: [number, number, number, number, number, number],
@@ -163,6 +157,7 @@ async function loadNode(node: string) {
 
 		const positions = new Float64Array(targetNode.pointCount * 3);
 		const colors = new Float32Array(targetNode.pointCount * 3);
+		const heights = new Float32Array(targetNode.pointCount);
 		const classifications = new Uint8Array(targetNode.pointCount);
 		const intensities = new Float32Array(targetNode.pointCount);
 
@@ -183,9 +178,6 @@ async function loadNode(node: string) {
 		const getClassification = hasClassification
 			? view.getter('Classification')
 			: null;
-
-		const cubeMinZ = copc.info.cube[2];
-		const cubeRangeZ = copc.info.cube[5] - cubeMinZ;
 
 		for (let i = 0; i < targetNode.pointCount; i++) {
 			const px = getX(i);
@@ -210,69 +202,17 @@ async function loadNode(node: string) {
 			positions[i * 3 + 1] = mercY;
 			positions[i * 3 + 2] = mercZ;
 
+			heights[i] = height;
 			classifications[i] = getClassification ? getClassification(i) : 0;
 			intensities[i] = getIntensity ? getIntensity(i) / 65535 : 0;
 
-			switch (colorMode) {
-				case 'rgb':
-					if (getRed && getGreen && getBlue) {
-						colors[i * 3] = getRed(i) / 65535;
-						colors[i * 3 + 1] = getGreen(i) / 65535;
-						colors[i * 3 + 2] = getBlue(i) / 65535;
-					} else {
-						colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = 1;
-					}
-					break;
-
-				case 'height': {
-					const normalizedHeight = (pz - cubeMinZ) / cubeRangeZ;
-					colors[i * 3] = Math.min(1, Math.max(0, normalizedHeight * 2));
-					colors[i * 3 + 1] = Math.min(
-						1,
-						Math.max(
-							0,
-							normalizedHeight > 0.5
-								? 2 - normalizedHeight * 2
-								: normalizedHeight * 2,
-						),
-					);
-					colors[i * 3 + 2] = Math.min(
-						1,
-						Math.max(0, 1 - normalizedHeight * 2),
-					);
-					break;
-				}
-
-				case 'intensity':
-					if (getIntensity) {
-						const intensity = getIntensity(i) / 65535;
-						colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = intensity;
-					} else {
-						colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = 1;
-					}
-					break;
-
-				case 'classification': {
-					if (getClassification) {
-						const cls = getClassification(i);
-						const c = classificationColors[cls];
-						if (c) {
-							colors[i * 3] = c[0];
-							colors[i * 3 + 1] = c[1];
-							colors[i * 3 + 2] = c[2];
-						} else {
-							colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = 1;
-						}
-					} else {
-						colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = 1;
-					}
-					break;
-				}
-
-				case 'white':
-				default:
-					colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = 1;
-					break;
+			// Always store RGB colors
+			if (getRed && getGreen && getBlue) {
+				colors[i * 3] = getRed(i) / 65535;
+				colors[i * 3 + 1] = getGreen(i) / 65535;
+				colors[i * 3 + 2] = getBlue(i) / 65535;
+			} else {
+				colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = 1;
 			}
 		}
 
@@ -282,6 +222,7 @@ async function loadNode(node: string) {
 				node,
 				positions: positions.buffer,
 				colors: colors.buffer,
+				heights: heights.buffer,
 				classifications: classifications.buffer,
 				intensities: intensities.buffer,
 				pointCount: targetNode.pointCount,
@@ -290,6 +231,7 @@ async function loadNode(node: string) {
 				transfer: [
 					positions.buffer,
 					colors.buffer,
+					heights.buffer,
 					classifications.buffer,
 					intensities.buffer,
 				],
@@ -364,11 +306,7 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 			case 'init':
 				url = message.url;
 				if (message.options) {
-					colorMode = message.options.colorMode || 'rgb';
 					alwaysShowRoot = message.options.alwaysShowRoot ?? false;
-					if (message.options.classificationColors) {
-						classificationColors = message.options.classificationColors;
-					}
 				}
 				lazPerf = await Las.PointData.createLazPerf({
 					locateFile: () => lazPerfWasmUrl,
